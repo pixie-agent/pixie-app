@@ -1,0 +1,189 @@
+{
+  "app": {
+    "name": "Pixie",
+    "beta": "BETA"
+  },
+  "common": {
+    "loading": "Loading...",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "done": "Done",
+    "error": "Error",
+    "success": "Success",
+    "copy": "Copy",
+    "copied": "Copied",
+    "search": "Search",
+    "clear": "Clear",
+    "refresh": "Refresh",
+    "settings": "Settings"
+  },
+  "splash": {
+    "initializing": "Initializing..."
+  },
+  "engineSetup": {
+    "title": "Configure Agent Engine",
+    "description": "Pixie doesn't include its own models. Install and log in to one engine to get started. Ready check = successfully ping the model.",
+    "hint": "Note: Detection sends a ping message to the engine, which may incur minimal call costs.",
+    "close": "Close",
+    "enterApp": "Enter App",
+    "anyReady": "Has ready engine",
+    "noneReady": "No ready engines yet",
+    "status": {
+      "builtin": "Built-in",
+      "ready": "Ready",
+      "probing": "Checking...",
+      "notInstalled": "Not installed",
+      "notReady": "Not ready"
+    },
+    "actions": {
+      "oneClickInstall": "One-click Install",
+      "installing": "Installing...",
+      "oneClickLogin": "One-click Login",
+      "reprobe": "Re-detect",
+      "manualInstall": "Manual install (copy command to terminal)",
+      "copyLoginCommand": "Copy login command"
+    },
+    "messages": {
+      "builtinConfigHint": "Please configure ANTHROPIC_API_KEY in Settings → Engine Config → Builtin.",
+      "builtinDesc": "Built-in engine directly calls Anthropic Messages API, no CLI installation needed, just configure API Key.",
+      "notReadyHint": "Not ready. Click 'One-click Login' to login in browser, then click 'Re-detect' when done.",
+      "readyMessage": "Ready and available.",
+      "installFailed": "Installation failed, please use the command below to install manually",
+      "engineResponse": "Engine response:"
+    },
+    "commands": {
+      "copy": "Copy",
+      "copyToClipboard": "Copy to clipboard"
+    }
+  },
+  "sidebar": {
+    "newChat": "New Chat",
+    "workspaces": "Workspaces",
+    "addWorkspace": "Add Workspace",
+    "settings": "Settings",
+    "tasks": "Scheduled Tasks",
+    "loops": "Loop Tasks",
+    "skills": "Skill Marketplace",
+    "noWorkspaces": "No workspaces yet",
+    "recentChats": "Recent chats"
+  },
+  "chat": {
+    "newMessage": "Type a message...",
+    "send": "Send",
+    "stop": "Stop generation",
+    "addWorkspaceHint": "Add a workspace to send messages",
+    "toggleKb": "Enable knowledge base search",
+    "kbEnabled": "Knowledge base search enabled",
+    "noConversation": "Please create or select a conversation first"
+  },
+  "settings": {
+    "title": "Settings",
+    "agentEngines": "Agent Engines",
+    "preferredEngine": "Preferred Engine",
+    "preferredEngineHint": "New sessions use this engine. Existing sessions keep their bound engine.",
+    "workingDirectory": "Working Directory",
+    "workingDirectoryHint": "The folder Pixie uses when none is selected. Applied on a fresh start with no workspaces added — existing workspaces are not changed.",
+    "changeDirectory": "Change...",
+    "resetDirectory": "Reset to ~/.pixie",
+    "knowledgeBase": "Knowledge Base",
+    "knowledgeBaseHint": "Conversation notes are saved to the Pixie/ subdirectory of this folder. Open it with Obsidian or any markdown viewer.",
+    "knowledgeBaseDefault": "Using default location. Set a custom folder to manage notes with your preferred tools.",
+    "knowledgeBaseNotSet": "Set a folder to enable knowledge base features.",
+    "openInObsidian": "Open in Obsidian",
+    "openFolder": "Open Folder",
+    "backfillHistory": "Backfill History",
+    "theme": "Theme",
+    "dark": "Dark",
+    "light": "Light",
+    "modelConfig": "Model Configuration",
+    "modelConfigHint": "Environment overrides per engine. Leave empty to use system defaults.",
+    "appliesOnly": "Applies only to {{name}} sessions.",
+    "overrides": "override{{count, plural, one{} other{s}}}",
+    "systemPrompt": "System Prompt",
+    "systemPromptPlaceholder": "Enter a system prompt for the agent...",
+    "about": "About",
+    "aboutDescription": "A general-purpose desktop AI agent workspace. Supports Claude, Cursor, and CodeBuddy engines.",
+    "builtWith": "Built with Tauri v2 + React + TypeScript",
+    "version": "Version",
+    "keyboardShortcuts": "Keyboard Shortcuts",
+    "shortcuts": {
+      "newChat": "New chat",
+      "stopGeneration": "Stop generation",
+      "sendMessage": "Send message",
+      "newLine": "New line",
+      "toggleSidebar": "Toggle sidebar",
+      "toggleSettings": "Toggle settings",
+      "toggleSearch": "Search knowledge base"
+    }
+  },
+  "tasks": {
+    "title": "Scheduled Tasks",
+    "create": "Create Task",
+    "edit": "Edit Task",
+    "delete": "Delete Task",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "runNow": "Run Now",
+    "lastRun": "Last run",
+    "nextRun": "Next run",
+    "noTasks": "No scheduled tasks yet",
+    "schedule": "Schedule",
+    "prompt": "Prompt",
+    "workspace": "Workspace"
+  },
+  "loops": {
+    "title": "Loop Tasks",
+    "create": "Create Loop Task",
+    "start": "Start",
+    "pause": "Pause",
+    "resume": "Resume",
+    "stop": "Stop",
+    "discard": "Discard",
+    "running": "Running",
+    "paused": "Paused",
+    "status": "Status"
+  },
+  "marketplace": {
+    "title": "Skill Marketplace",
+    "search": "Search skills...",
+    "install": "Install",
+    "uninstall": "Uninstall",
+    "installed": "Installed",
+    "noSkills": "No skills available"
+  },
+  "search": {
+    "title": "Search Knowledge Base",
+    "placeholder": "Search notes and conversations...",
+    "noResults": "No results found",
+    "openInObsidian": "Open in Obsidian"
+  },
+  "updater": {
+    "checkForUpdates": "Check for Updates",
+    "checking": "Checking...",
+    "downloading": "Downloading...",
+    "upToDate": "You're on the latest version",
+    "available": "New version available",
+    "install": "Install",
+    "restartNow": "Restart Now",
+    "tryBeta": "Try the Beta",
+    "tryBetaHint": "Install the latest beta (prerelease) build to try new features early"
+  },
+  "language": {
+    "title": "Language",
+    "select": "Select Language",
+    "current": "Current Language"
+  },
+  "engines": {
+    "claude": "Claude",
+    "cursor": "Cursor",
+    "codebuddy": "CodeBuddy",
+    "builtin": "Built-in",
+    "codex": "Codex"
+  }
+}

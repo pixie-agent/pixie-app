@@ -1,0 +1,56 @@
+[package]
+name = "pixie"
+version = "0.8.0-beta.4"
+description = "Pixie - General-Purpose AI Agent Workspace"
+authors = ["white1or1black"]
+license = "MIT"
+repository = "https://github.com/white1or1black/pixie"
+edition = "2021"
+rust-version = "1.77.2"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "pixie_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.2", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.11.2", features = ["protocol-asset"] }
+tauri-plugin-log = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1"
+thiserror = "2"
+directories = "6"
+libc = "0.2.186"
+# Decodes base64-encoded pasted-image bytes coming from the webview clipboard.
+base64 = "0.22"
+# URL-encoding for Obsidian URI scheme (obsidian://open?vault=...).
+urlencoding = "2"
+# Chinese word segmentation for CJK search tokenization.
+jieba-rs = "0.10"
+# Regex matching for loop exit conditions (NoErrorPattern, SuccessPattern).
+regex = "1"
+# URL parsing for the beta-channel update endpoint override.
+url = "2"
+# HTTP client for builtin engine (Anthropic Messages API SSE streaming).
+# rustls-tls so the app cross-compiles to Android without a system OpenSSL.
+reqwest = { version = "0.12", default-features = false, features = ["stream", "json", "rustls-tls", "http2"] }
+futures-util = "0.3"
+async-trait = "0.1"
+tokio-util = "0.7"
+# Builtin engine: in-process agent loop via the pixie-pi library crate.
+# Local path so we can patch Android blockers (e.g. a no-bash toolset).
+pixie-pi = { path = "../../pixie-pi" }

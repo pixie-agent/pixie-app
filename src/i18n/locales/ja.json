@@ -1,0 +1,189 @@
+{
+  "app": {
+    "name": "Pixie",
+    "beta": "BETA"
+  },
+  "common": {
+    "loading": "読み込み中...",
+    "cancel": "キャンセル",
+    "confirm": "確認",
+    "save": "保存",
+    "delete": "削除",
+    "edit": "編集",
+    "close": "閉じる",
+    "back": "戻る",
+    "next": "次へ",
+    "done": "完了",
+    "error": "エラー",
+    "success": "成功",
+    "copy": "コピー",
+    "copied": "コピーしました",
+    "search": "検索",
+    "clear": "クリア",
+    "refresh": "更新",
+    "settings": "設定"
+  },
+  "splash": {
+    "initializing": "初期化中..."
+  },
+  "engineSetup": {
+    "title": "Agent エンジンの設定",
+    "description": "Pixie はモデルを含んでいませ���。エンジンをインストールしてログインしてください。準備完了 = モデルへの ping が成功。",
+    "hint": "注意：検出時にエンジンに ping メッセージを送信するため、ごくわずかな料金が発生する可能性があります。",
+    "close": "閉じる",
+    "enterApp": "アプリに入る",
+    "anyReady": "準備完了のエンジンがあります",
+    "noneReady": "まだ準備完了のエンジンがありません",
+    "status": {
+      "builtin": "組み込み",
+      "ready": "準備完了",
+      "probing": "確認中...",
+      "notInstalled": "未インストール",
+      "notReady": "未準備"
+    },
+    "actions": {
+      "oneClickInstall": "ワンクリックインストール",
+      "installing": "インストール中...",
+      "oneClickLogin": "ワンクリックログイン",
+      "reprobe": "再検出",
+      "manualInstall": "手動インストール（コマンドをターミナルにコピーして実行）",
+      "copyLoginCommand": "ログインコマンドをコピー"
+    },
+    "messages": {
+      "builtinConfigHint": "設定 → エンジン設定 → Builtin で ANTHROPIC_API_KEY を設定してください。",
+      "builtinDesc": "組み込みエンジンは Anthropic Messages API を直接呼び出します。CLI のインストールは不要で、API キーの設定のみが必要です。",
+      "notReadyHint": "未準備です。「ワンクリックログイン」でブラウザでログインし、完了したら「再検出」をクリックしてください。",
+      "readyMessage": "準備完了、使用可能です。",
+      "installFailed": "インストールに失敗しました。以下のコマンドで手動インストールしてください",
+      "engineResponse": "エンジンの応答："
+    },
+    "commands": {
+      "copy": "コピー",
+      "copyToClipboard": "クリップボードにコピー"
+    }
+  },
+  "sidebar": {
+    "newChat": "新しいチャット",
+    "workspaces": "ワークスペース",
+    "addWorkspace": "ワークスペースを追加",
+    "settings": "設定",
+    "tasks": "スケジュールタスク",
+    "loops": "ループタスク",
+    "skills": "スキルマーケットプレース",
+    "noWorkspaces": "ワークスペースがありません",
+    "recentChats": "最近のチャット"
+  },
+  "chat": {
+    "newMessage": "メッセージを入力...",
+    "send": "送信",
+    "stop": "生成を停止",
+    "addWorkspaceHint": "ワークスペースを追加してメッセージを送信",
+    "toggleKb": "ナレッジベース検索を有効化",
+    "kbEnabled": "ナレッジベース検索が有効",
+    "noConversation": "最初にチャットを作成または選択してください"
+  },
+  "settings": {
+    "title": "設定",
+    "agentEngines": "Agent エンジン",
+    "preferredEngine": "優先エンジン",
+    "preferredEngineHint": "新しいセッションはこのエンジンを使用します。既存のセッションはバインドされたエンジンを保持します。",
+    "workingDirectory": "作業ディレクトリ",
+    "workingDirectoryHint": "何も選択されていない場合に Pixie が使用するフォルダ。ワークスペースが追加されていない状態で新しく開始したときに適用されます — 既存のワークスペースは変更されません。",
+    "changeDirectory": "変更...",
+    "resetDirectory": "~/.pixie にリセット",
+    "knowledgeBase": "ナレッジベース",
+    "knowledgeBaseHint": "会話ノートはこのフォルダの Pixie/ サブディレクトリに保存されます。Obsidian または任意の markdown ビューアで開いてください。",
+    "knowledgeBaseDefault": "デフォルトの場所を使用しています。カスタムフォルダを設定して、好みのツールでノートを管理してください。",
+    "knowledgeBaseNotSet": "ナレッジベース機能を有効にするにはフォルダを設定してください。",
+    "openInObsidian": "Obsidian で開く",
+    "openFolder": "フォルダを開く",
+    "backfillHistory": "履歴をバックフィル",
+    "theme": "テーマ",
+    "dark": "ダーク",
+    "light": "ライト",
+    "modelConfig": "モデル設定",
+    "modelConfigHint": "エンジンごとの環境変数オーバーライド。空のままにするとシステムデフォルトを使用します。",
+    "appliesOnly": "{{name}} セッションにのみ適用されます。",
+    "overrides": "個のオーバーライド",
+    "systemPrompt": "システムプロンプト",
+    "systemPromptPlaceholder": "エージェントのシステムプロンプトを入力...",
+    "about": "について",
+    "aboutDescription": "汎用デスクトップ AI エージェントワークスペース。Claude、Cursor、CodeBuddy エンジンをサポート。",
+    "builtWith": "Tauri v2 + React + TypeScript で構築",
+    "version": "バージョン",
+    "keyboardShortcuts": "キーボードショートカット",
+    "shortcuts": {
+      "newChat": "新しいチャット",
+      "stopGeneration": "生成を停止",
+      "sendMessage": "メッセージを送信",
+      "newLine": "改行",
+      "toggleSidebar": "サイドバーを切り替え",
+      "toggleSettings": "設定を切り替え",
+      "toggleSearch": "ナレッジベースを検索"
+    }
+  },
+  "tasks": {
+    "title": "スケジュールタスク",
+    "create": "タスクを作成",
+    "edit": "タスクを編集",
+    "delete": "タスクを削除",
+    "enabled": "有効",
+    "disabled": "無効",
+    "runNow": "今すぐ実行",
+    "lastRun": "前回実行",
+    "nextRun": "次回実行",
+    "noTasks": "スケジュールタスクがありません",
+    "schedule": "スケジュール",
+    "prompt": "プロンプト",
+    "workspace": "ワークスペース"
+  },
+  "loops": {
+    "title": "ループタスク",
+    "create": "ループタスクを作成",
+    "start": "開始",
+    "pause": "一時停止",
+    "resume": "再開",
+    "stop": "停止",
+    "discard": "破棄",
+    "running": "実行中",
+    "paused": "一時停止中",
+    "status": "状態"
+  },
+  "marketplace": {
+    "title": "スキルマーケットプレース",
+    "search": "スキルを検索...",
+    "install": "インストール",
+    "uninstall": "アンインストール",
+    "installed": "インストール済み",
+    "noSkills": "利用可能なスキルがありません"
+  },
+  "search": {
+    "title": "ナ��ッジベースを検索",
+    "placeholder": "ノートと会話を検索...",
+    "noResults": "結果が見つかりません",
+    "openInObsidian": "Obsidian で開く"
+  },
+  "updater": {
+    "checkForUpdates": "更新を確認",
+    "checking": "確認中...",
+    "downloading": "ダウンロード中...",
+    "upToDate": "最新バージョンをご利用中です",
+    "available": "新しいバージョンが利用可能",
+    "install": "インストール",
+    "restartNow": "今すぐ再起動",
+    "tryBeta": "ベータ版を試す",
+    "tryBetaHint": "最新のベータ版（プレリリース）をインストールして、新機能を早期体験"
+  },
+  "language": {
+    "title": "言語",
+    "select": "言語を選択",
+    "current": "現在の言語"
+  },
+  "engines": {
+    "claude": "Claude",
+    "cursor": "Cursor",
+    "codebuddy": "CodeBuddy",
+    "builtin": "組み込み",
+    "codex": "Codex"
+  }
+}
