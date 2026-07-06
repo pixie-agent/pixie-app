@@ -14,7 +14,6 @@ interface SidebarProps {
   onNew: (opts?: { workspaceId?: string; engine?: AgentEngineId; model?: string }) => void;
   onDelete: (id: string, workspaceId: string) => void;
   onRename: (id: string, newTitle: string) => void;
-  onAddWorkspace: () => void;
   onRemoveWorkspace: (id: string) => void;
   onSetWorkspaceFilter: (id: string | null) => void;
   onOpenSettings: () => void;
@@ -268,7 +267,6 @@ export default function Sidebar({
   onNew,
   onDelete,
   onRename,
-  onAddWorkspace,
   onRemoveWorkspace,
   onSetWorkspaceFilter,
   onOpenSettings,
@@ -395,6 +393,7 @@ export default function Sidebar({
           flex-col
           transition-transform duration-200 ease-out
           lg:relative
+          pt-[env(safe-area-inset-top)]
           ${isOpen ? "flex translate-x-0 sidebar-enter" : "hidden"}
         `}
       >
@@ -413,7 +412,7 @@ export default function Sidebar({
           </button>
         </div>
         {/* Workspace filter & management */}
-        {visibleWorkspaces.length > 0 ? (
+        {visibleWorkspaces.length > 0 && (
           <div className="px-3 py-2 border-b border-[var(--border-color)]">
             <div className="relative" ref={wsDropdownRef}>
               <button
@@ -483,30 +482,9 @@ export default function Sidebar({
                         </button>
                       </div>
                     ))}
-                    <button
-                      onClick={() => { onAddWorkspace(); setWsDropdownOpen(false); }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[var(--accent)] hover:bg-[var(--bg-tertiary)] transition-colors border-t border-[var(--border-color)]"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                        <path d="M6 3v6M3 6h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                      </svg>
-                      Add workspace…
-                    </button>
                   </div>
               )}
             </div>
-          </div>
-        ) : (
-          <div className="px-3 py-2 border-b border-[var(--border-color)]">
-            <button
-              onClick={onAddWorkspace}
-              className="w-full flex items-center justify-center gap-2 bg-[var(--accent)] hover:opacity-90 text-white rounded-lg px-3 py-2 text-xs font-medium transition-opacity cursor-pointer"
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <path d="M6 3v6M3 6h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-              Add workspace…
-            </button>
           </div>
         )}
 

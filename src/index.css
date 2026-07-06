@@ -50,12 +50,14 @@ body,
 
 /* On Android with enableEdgeToEdge(), the WebView content renders behind
    the status bar. The root app container must add safe-area-inset padding
-   so the header / sidebar / input bar don't overlap system bars. */
+   so the header / sidebar / input bar don't overlap system bars.
+   The soft-keyboard overlay is handled at the native level (MainActivity
+   sets WebView bottom padding to match the IME height). */
 .safe-area-container {
   padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 body {

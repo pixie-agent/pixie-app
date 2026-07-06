@@ -229,8 +229,10 @@ function EngineSetup({
 }
 
 function AppShell() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const isMobile = useIsMobile();
+  // On mobile the sidebar is a full-screen overlay — start closed so the chat
+  // view is visible immediately. Desktop uses an inline sidebar, start open.
+  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [fileExplorerOpen, setFileExplorerOpen] = useState(false);
   const [headerEditing, setHeaderEditing] = useState(false);
   const [headerEditValue, setHeaderEditValue] = useState("");
@@ -284,7 +286,6 @@ function AppShell() {
     workspaceFilter,
     setWorkspaceFilter,
     error,
-    addWorkspace,
     removeWorkspace,
     createConversation,
     switchConversation,
@@ -611,7 +612,6 @@ ${entries}
         readyEngineIds={readyEngineIds}
         onDelete={deleteConversation}
         onRename={renameConversation}
-        onAddWorkspace={addWorkspace}
         onRemoveWorkspace={removeWorkspace}
         onSetWorkspaceFilter={setWorkspaceFilter}
         onOpenSettings={() => { setMainView("settings"); if (isMobile) setSidebarOpen(false); }}
@@ -857,7 +857,7 @@ ${entries}
           across workspace switches. */}
       {activeWorkspace?.path && (
         <div
-          className="h-full fixed inset-0 z-40 lg:relative"
+          className="h-full fixed inset-0 z-40 lg:relative pt-[env(safe-area-inset-top)]"
           style={{ display: fileExplorerOpen ? "block" : "none" }}
         >
           <Suspense fallback={<LoadingPanel />}>

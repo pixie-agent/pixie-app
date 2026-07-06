@@ -769,11 +769,12 @@ async fn set_default_workspace_path(path: Option<String>, app: AppHandle) -> Res
     Ok(())
 }
 
-/// No native folder picker wired on Android (a default workspace is auto-created
-/// from get_default_workspace_path, so picking isn't required to chat).
+/// Open a native folder picker (works on Android via tauri-plugin-dialog).
 #[tauri::command]
-async fn pick_folder(_app: AppHandle) -> Result<Option<String>, String> {
-    Ok(None)
+async fn pick_folder(app: AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let folder = app.dialog().file().blocking_pick_file();
+    Ok(folder.map(|p| p.to_string()))
 }
 
 #[tauri::command]
@@ -858,10 +859,12 @@ async fn select_workspace(
     Ok(None)
 }
 
-/// No multi-select file picker on Android. Returns `None`.
+/// Open a native multi-file picker (works on Android via tauri-plugin-dialog).
 #[tauri::command]
-async fn pick_files(_app: AppHandle) -> Result<Option<Vec<String>>, String> {
-    Ok(None)
+async fn pick_files(app: AppHandle) -> Result<Option<Vec<String>>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let files = app.dialog().file().blocking_pick_files();
+    Ok(files.map(|paths| paths.iter().map(|p| p.to_string()).collect()))
 }
 
 /// Persist a pasted screenshot/image to disk and return its absolute path.
@@ -1830,7 +1833,8 @@ async fn list_task_runs(app: AppHandle) -> Result<Vec<TaskRunRecord>, String> {
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_notification::init());
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init());
 
     builder
         .setup(|app| {
