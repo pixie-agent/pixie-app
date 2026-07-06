@@ -28,7 +28,6 @@ pub const DEFAULT_MODEL: &str = "claude-sonnet-4-20250514";
 // ---------------------------------------------------------------------------
 
 pub struct BuiltinSession {
-    pub session_id: String,
     session: AgentSession,
     cancel_token: CancellationToken,
 }
@@ -37,7 +36,6 @@ impl BuiltinSession {
     /// Create a new session. Signature matches the old hand-rolled builtin so
     /// `lib.rs` is unchanged.
     pub fn new(
-        session_id: &str,
         model: Option<&str>,
         system_prompt: Option<&str>,
         cwd: &str,
@@ -90,7 +88,6 @@ impl BuiltinSession {
         };
 
         Self {
-            session_id: session_id.to_string(),
             session,
             cancel_token: CancellationToken::new(),
         }
@@ -121,10 +118,6 @@ impl BuiltinSession {
     ) -> Result<(String, bool)> {
         self.cancel_token = cancel_token;
 
-        emit(NormalizedEvent::SessionEstablished {
-            session_id: self.session_id.clone(),
-        });
-
         let model_id = self.session.model.id.clone();
         let prompts = vec![Message::User(UserMessage::text(message))];
 
@@ -141,6 +134,44 @@ impl BuiltinSession {
         // the frontend in real time — NOT buffered in a channel until the turn
         // ends (which caused the long "no response" gap before text appeared).
         while let Some(ev) = stream.next().await {
+            let ev_name = match &ev {
+                AgentEvent::AgentStart => "AgentStart",
+                AgentEvent::AgentEnd { .. } => "AgentEnd",
+                AgentEvent::TurnStart => "TurnStart",
+                AgentEvent::TurnEnd { .. } => "TurnEnd",
+                AgentEvent::MessageStart(_) => "MessageStart",
+                AgentEvent::MessageUpdate { event } => match event {
+                    AssistantMessageEvent::TextDelta { delta, .. } => {
+                        log::info!("[builtin] TextDelta len={}", delta.len());
+                        "MessageUpdate/TextDelta"
+                    }
+                    AssistantMessageEvent::ThinkingDelta { .. } => {
+                        "MessageUpdate/ThinkingDelta"
+                    }
+                    AssistantMessageEvent::Done { message, .. } => {
+                        log::info!("[builtin] Done event, text_len={}", message.text_content().len());
+                        "MessageUpdate/Done"
+                    }
+                    AssistantMessageEvent::Error { message, .. } => {
+                        log::info!("[builtin] Error event, text_len={}", message.text_content().len());
+                        "MessageUpdate/Error"
+                    }
+                    _ => "MessageUpdate/other",
+                },
+                AgentEvent::MessageEnd(msg) => {
+                    let text_len = match msg {
+                        Message::Assistant(a) => a.text_content().len(),
+                        _ => 0,
+                    };
+                    log::info!("[builtin] MessageEnd text_len={}", text_len);
+                    "MessageEnd"
+                }
+                AgentEvent::ToolExecutionStart { .. } => "ToolExecutionStart",
+                AgentEvent::ToolExecutionEnd { .. } => "ToolExecutionEnd",
+                AgentEvent::Usage(_) => "Usage",
+                AgentEvent::Error(_) => "Error",
+            };
+            log::info!("[builtin] stream event: {}", ev_name);
             map_agent_event(&ev, &model_id, &mut final_text, &mut had_error, &mut emit);
             if let AgentEvent::AgentEnd { messages } = &ev {
                 final_messages = Some(messages.clone());
@@ -234,18 +265,36 @@ fn map_agent_event(
     emit: &mut impl FnMut(NormalizedEvent),
 ) {
     match ev {
-        // Live text/thinking deltas → stream straight through.
+        // Live text/thinking deltas → stream straight through AND accumulate
+        // into final_text so the command return value contains the full
+        // response even when MessageEnd.text_content() is empty.
         AgentEvent::MessageUpdate { event } => match event {
             AssistantMessageEvent::TextDelta { delta, .. } => {
+                final_text.push_str(delta);
                 emit(NormalizedEvent::TextDelta {
                     text: delta.clone(),
                     event_type: "delta",
                 });
             }
-            AssistantMessageEvent::ThinkingDelta { delta, .. } => {
-                emit(NormalizedEvent::ThinkingText {
-                    content: delta.clone(),
-                });
+            AssistantMessageEvent::ThinkingDelta { delta: _, .. } => {
+                // Thinking deltas not accumulated into final_text
+            }
+            // The "Done" / "Error" stop events carry the full assembled
+            // AssistantMessage — extract text here as a fallback when the
+            // API doesn't stream TextDelta events (e.g. glm via Anthropic-
+            // compatible endpoint).
+            AssistantMessageEvent::Done { message, .. }
+            | AssistantMessageEvent::Error { message, .. } => {
+                let text = message.text_content();
+                if !text.is_empty() && final_text.is_empty() {
+                    *final_text = text.clone();
+                }
+                if !text.is_empty() {
+                    emit(NormalizedEvent::TextDelta {
+                        text,
+                        event_type: "final",
+                    });
+                }
             }
             _ => {}
         },
@@ -378,16 +427,12 @@ fn resolve_builtin_model(model: Option<&str>, base_url: Option<&str>) -> Model {
 // Config helpers
 // ---------------------------------------------------------------------------
 
-/// API key priority: builtin config → claude config → ANTHROPIC_API_KEY env.
+/// API key priority: builtin config → ANTHROPIC_API_KEY env.
 pub fn get_api_key() -> String {
     use super::shared::get_model_config_value;
 
     if let Some(v) = get_model_config_value("builtin", "ANTHROPIC_API_KEY") {
         log::info!("[builtin] using API key from builtin config");
-        return v;
-    }
-    if let Some(v) = get_model_config_value("claude", "ANTHROPIC_API_KEY") {
-        log::info!("[builtin] using API key from claude config");
         return v;
     }
     if let Ok(v) = std::env::var("ANTHROPIC_API_KEY") {
@@ -396,29 +441,24 @@ pub fn get_api_key() -> String {
             return v;
         }
     }
-    log::warn!(
-        "[builtin] no API key found: checked builtin config, claude config, and ANTHROPIC_API_KEY env var"
-    );
+    log::warn!("[builtin] no API key found: checked builtin config and ANTHROPIC_API_KEY env var");
     String::new()
 }
 
-/// Base URL priority: builtin config → claude config → ANTHROPIC_BASE_URL env.
+/// Base URL priority: builtin config → ANTHROPIC_BASE_URL env.
 pub fn get_base_url() -> Option<String> {
     use super::shared::get_model_config_value;
-    get_model_config_value("builtin", "ANTHROPIC_BASE_URL")
-        .or_else(|| get_model_config_value("claude", "ANTHROPIC_BASE_URL"))
-        .or_else(|| {
-            std::env::var("ANTHROPIC_BASE_URL")
-                .ok()
-                .filter(|v| !v.is_empty())
-        })
+    get_model_config_value("builtin", "ANTHROPIC_BASE_URL").or_else(|| {
+        std::env::var("ANTHROPIC_BASE_URL")
+            .ok()
+            .filter(|v| !v.is_empty())
+    })
 }
 
-/// Model priority: builtin config → claude config → ANTHROPIC_MODEL env → default.
+/// Model priority: builtin config → ANTHROPIC_MODEL env → default.
 pub fn get_model() -> String {
     use super::shared::get_model_config_value;
     get_model_config_value("builtin", "ANTHROPIC_MODEL")
-        .or_else(|| get_model_config_value("claude", "ANTHROPIC_MODEL"))
         .or_else(|| {
             std::env::var("ANTHROPIC_MODEL")
                 .ok()

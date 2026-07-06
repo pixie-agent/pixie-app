@@ -34,15 +34,6 @@ export interface Message {
   usage?: MessageUsage;
   thinkingTokens?: number;
   thinking?: string;
-  /** Pending permission requests from the agent (tool calls needing user approval). */
-  pendingPermissions?: PendingPermission[];
-}
-
-/** A pending permission request from the agent. */
-export interface PendingPermission {
-  requestId: string;
-  toolName: string;
-  input: unknown;
 }
 
 export interface Conversation {
@@ -55,11 +46,6 @@ export interface Conversation {
   engine: AgentEngineId;
   /** Per-conversation model override. When empty/undefined, uses the engine's global config. */
   model?: string;
-  /** When present, this conversation is a loop iteration and belongs to the
-   *  loop task with this id. The sidebar uses this to group iterations under their parent. */
-  loopTaskId?: string;
-  /** Display name of the parent loop task (for sidebar grouping header). */
-  loopTaskName?: string;
 }
 
 export type AgentEngineId = "builtin";
@@ -100,9 +86,6 @@ export interface EngineStatus {
   /** Raw engine message for a non-`ready` probe outcome. */
   probe_error?: string | null;
 }
-
-/** @deprecated Use EngineStatus — kept for gradual migration */
-export type ClaudeStatus = Pick<EngineStatus, "available" | "version" | "path" | "error">;
 
 export interface ResponseChunk {
   conversation_id: string;
@@ -154,52 +137,14 @@ export interface ResponseError {
   error: string;
 }
 
-/** Permission request from the agent (it wants to run a tool and needs user approval). */
-export interface ResponsePermissionRequest {
-  conversation_id: string;
-  /** Unique ID of the permission request (from the CLI). */
-  request_id: string;
-  /** Tool name (e.g. "Bash", "Edit", "Write"). */
-  tool_name: string;
-  /** Tool input as a JSON value. */
-  input: unknown;
-}
-
-export interface WorkspaceInfo {
-  path?: string | null;
-  name?: string | null;
-}
-
 export interface WorkspaceState {
   id: string;
   path: string;
   name: string;
 }
 
-export interface ClaudeModelConfig {
-  ANTHROPIC_API_KEY?: string;
-  ANTHROPIC_BASE_URL?: string;
-  ANTHROPIC_MODEL?: string;
-  ANTHROPIC_DEFAULT_OPUS_MODEL?: string;
-  ANTHROPIC_DEFAULT_SONNET_MODEL?: string;
-  ANTHROPIC_DEFAULT_HAIKU_MODEL?: string;
-  CLAUDE_CODE_SUBAGENT_MODEL?: string;
-  CLAUDE_CODE_EFFORT_LEVEL?: string;
-}
-
-export interface CursorModelConfig {
-  CURSOR_API_KEY?: string;
-  /** Passed to cursor-agent as --model when set */
-  CURSOR_MODEL?: string;
-}
-
-export interface CodebuddyModelConfig {
-  /** Passed to codebuddy as --model when set */
-  CODEBUDDY_MODEL?: string;
-}
-
 export interface BuiltinModelConfig {
-  /** Shared with Claude engine — Anthropic API key */
+  /** Anthropic API key */
   ANTHROPIC_API_KEY?: string;
   /** Custom Anthropic API base URL */
   ANTHROPIC_BASE_URL?: string;
@@ -207,20 +152,10 @@ export interface BuiltinModelConfig {
   ANTHROPIC_MODEL?: string;
 }
 
-export interface CodexModelConfig {
-  /** OpenAI API key */
-  OPENAI_API_KEY?: string;
-  /** Model override for codex engine */
-  CODEX_MODEL?: string;
-}
-
 /** Per-engine model/env overrides. */
 export type EngineModelConfigs = {
   builtin: BuiltinModelConfig;
 };
-
-/** @deprecated Use EngineModelConfigs */
-export type ModelConfig = ClaudeModelConfig;
 
 export const DEFAULT_ENGINE_MODEL_CONFIGS: EngineModelConfigs = {
   builtin: {},
@@ -251,31 +186,6 @@ export interface SkillEntry {
   source: "user" | "project" | "plugin";
   /** Text inserted into the input when picked, e.g. "/skill-name ". */
   invocation: string;
-}
-
-/** A configured plugin marketplace (Claude agent standard; `claude plugin marketplace list --json`). */
-export interface MarketplaceInfo {
-  name: string;
-  source: string;
-  repo: string;
-  installLocation: string;
-}
-
-/** A plugin entry from `claude plugin list --json --available`. Fields beyond
- *  name/pluginId/marketplaceName/description are optional for resilience. */
-export interface PluginInfo {
-  pluginId: string;
-  name: string;
-  description: string;
-  marketplaceName: string;
-  version?: string;
-  source?: string;
-  installCount?: number;
-}
-
-export interface PluginCatalog {
-  installed: PluginInfo[];
-  available: PluginInfo[];
 }
 
 /** A preview-open request (what callers pass to the handler). */
@@ -326,120 +236,6 @@ export interface TaskRunRecord {
   started_at: string;
   finished_at: string;
 }
-
-// ---------------------------------------------------------------------------
-// Loop tasks
-// ---------------------------------------------------------------------------
-
-/** An exit condition for a loop task. The loop terminates when ANY condition is met. */
-export type LoopExitCondition =
-  | { type: "max_iterations"; max: number }
-  | { type: "no_error_pattern"; pattern: string }
-  | { type: "success_pattern"; pattern: string }
-  | { type: "output_unchanged"; streak: number }
-  | { type: "manual_only" };
-
-/** Current lifecycle state of a loop task. */
-export type LoopTaskStatus = "idle" | "running" | "paused" | "completed" | "aborted" | "error";
-
-/** A loop task: an iterative agent cycle that feeds each iteration's result
- *  back as context for the next one, until an exit condition is satisfied. */
-export interface LoopTask {
-  id: string;
-  name: string;
-  workspace: string;
-  engine: AgentEngineId;
-  /** Prompt for the first iteration. */
-  initial_prompt: string;
-  /** Template for subsequent iterations. `{{previous_result}}` is replaced
-   *  with the last iteration's output. */
-  result_template: string;
-  /** Exit conditions — loop stops when ANY one is satisfied. */
-  exit_conditions: LoopExitCondition[];
-  /** Iterations completed so far (0 = not started). */
-  iteration: number;
-  status: LoopTaskStatus;
-  /** Raw output of the most recent iteration. */
-  last_result: string | null;
-  /** Consecutive unchanged outputs for output_unchanged convergence tracking. */
-  unchanged_streak: number;
-  /** Optional schedule for automatic triggering. */
-  schedule?: ScheduleSpec | null;
-  next_run: string | null;
-  last_run: string | null;
-  enabled: boolean;
-  created_at: string;
-  /** Human-readable reason explaining why the loop was aborted or completed.
-   *  For aborted: describes who stopped it (user/system) and why.
-   *  For completed: describes which exit condition was satisfied. */
-  completion_reason: string | null;
-  /** Summary of changes made during the loop (extracted from tool use events).
-   *  Populated when the loop completes successfully. */
-  changes_summary: string | null;
-}
-
-/** Record of a single iteration within a loop cycle. */
-export interface LoopIterationRecord {
-  id: string;
-  loop_task_id: string;
-  iteration: number;
-  /** The actual prompt sent (after template substitution). */
-  prompt: string;
-  result: string;
-  status: "ok" | "error";
-  started_at: string;
-  finished_at: string;
-  /** Whether any exit condition was satisfied after this iteration. */
-  exit_met: boolean;
-  /** Snapshot of PROGRESS.md from the workspace (if it exists). */
-  progress_snapshot?: string | null;
-}
-
-export type DiffLineType = "context" | "add" | "delete";
-
-export interface DiffLine {
-  type: DiffLineType;
-  /** Line content with the leading +/-/space prefix already stripped. */
-  text: string;
-  /** 1-based line number in the NEW file (undefined on pure deletions). */
-  newNumber?: number;
-  /** 1-based line number in the OLD file (undefined on pure additions). */
-  oldNumber?: number;
-  /** True when the original line had no trailing newline ("\ No newline..."). */
-  noNewline?: boolean;
-}
-
-export interface DiffHunk {
-  /** Header, e.g. "@@ -10,5 +10,7 @@". */
-  header: string;
-  lines: DiffLine[];
-}
-
-export type DiffFileStatus = "added" | "modified" | "deleted" | "renamed";
-
-export interface DiffFile {
-  /** Display path (the new path, or the old path for deletions). */
-  path: string;
-  /** Previous path when the file was renamed/moved. */
-  oldPath?: string;
-  status: DiffFileStatus;
-  /** True for binary changes (no textual hunks). */
-  binary: boolean;
-  hunks: DiffHunk[];
-  /** Added line count across all hunks. */
-  additions: number;
-  /** Removed line count across all hunks. */
-  deletions: number;
-}
-
-export interface ParsedDiff {
-  files: DiffFile[];
-  /** True when no `diff --git` blocks could be parsed. */
-  empty: boolean;
-}
-
-/** Render mode for the diff viewer. */
-export type DiffViewMode = "unified" | "split";
 
 /** BM25 search result from the knowledge base. */
 export interface KbSearchResult {

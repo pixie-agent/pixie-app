@@ -13,14 +13,11 @@ import type {
   ResponseUsage,
   ResponseThinking,
   ResponseThinkingText,
-  ResponsePermissionRequest,
   MessageUsage,
   ToolStep,
   WorkspaceState,
   EngineModelConfigs,
   TaskRunRecord,
-  LoopTask,
-  LoopIterationRecord,
 } from "../types";
 import { AGENT_ENGINES } from "../types";
 import { getConfig, getHistory, setHistory, updateConfig } from "../lib/storage";
@@ -371,7 +368,7 @@ export function useChat(engineModelConfigs: EngineModelConfigs) {
   // tree and re-renders the sidebar/memos + reflows the growing reply; running
   // that on every animation frame (60fps) saturates the main thread once a
   // session has history, freezing the UI. Text is perfectly readable at 20fps.
-  // The terminal agent-done/agent-error flush bypasses this (immediate).
+  // agent-done/agent-error flushes bypass this throttle (immediate).
   const STREAM_FLUSH_MIN_MS = 50;
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -572,93 +569,6 @@ export function useChat(engineModelConfigs: EngineModelConfigs) {
     ensureDefault();
   }, []);
 
-  // Reconstruct loop-iteration conversations from durable backend data
-  // (loop_iterations.json). Loop iterations are backend-owned; the chat-history
-  // debounce/quit path is unreliable for them, so we rebuild any iteration not
-  // already present in memory (e.g. a live-streamed transcript that DID persist
-  // takes precedence). Live streaming during a run is unaffected — this only
-  // guarantees iterations survive restart.
-  useEffect(() => {
-    if (!loaded) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const [tasks, iterations] = await Promise.all([
-          invoke<LoopTask[]>("list_loop_tasks"),
-          invoke<LoopIterationRecord[]>("list_all_loop_iterations"),
-        ]);
-        if (cancelled || iterations.length === 0) return;
-        const taskById = new Map(tasks.map((t) => [t.id, t]));
-        // Build candidate conversations from a snapshot (ids are stable; we
-        // re-check against the latest state inside the updater to avoid races).
-        const snapshot = allConversationsRef.current;
-        const seen = new Set<string>();
-        for (const convs of Object.values(snapshot))
-          for (const c of convs) seen.add(c.id);
-        const candidates: { conv: Conversation; wsId: string }[] = [];
-        for (const it of iterations) {
-          if (seen.has(it.id)) continue; // full transcript from history wins
-          const task = taskById.get(it.loop_task_id);
-          if (!task) continue;
-          const created = Date.parse(it.started_at) || Date.now();
-          const updated = Date.parse(it.finished_at) || created;
-          candidates.push({
-            wsId: task.workspace,
-            conv: {
-              id: it.id,
-              title: `Loop: ${task.name} #${it.iteration}`,
-              createdAt: created,
-              updatedAt: updated,
-              engine: task.engine,
-              loopTaskId: task.id,
-              loopTaskName: task.name,
-              messages: [
-                {
-                  id: generateId(),
-                  role: "user",
-                  content: it.prompt,
-                  timestamp: created,
-                  status: "done",
-                },
-                {
-                  id: generateId(),
-                  role: "assistant",
-                  content:
-                    it.result ||
-                    (it.exit_met ? "(exit condition met, no output)" : "(no output)"),
-                  timestamp: updated,
-                  status: it.status === "error" ? "error" : "done",
-                },
-              ],
-            },
-          });
-        }
-        if (cancelled || candidates.length === 0) return;
-        setAllConversations((curr) => {
-          const have = new Set<string>();
-          for (const convs of Object.values(curr))
-            for (const c of convs) have.add(c.id);
-          let changed = false;
-          const next = { ...curr };
-          for (const { conv, wsId } of candidates) {
-            if (have.has(conv.id)) continue;
-            next[wsId] = [...(next[wsId] ?? []), conv];
-            have.add(conv.id);
-            changed = true;
-          }
-          return changed ? next : curr;
-        });
-        // Sync the conv→workspace index for the reconstructed iterations.
-        for (const { conv, wsId } of candidates) convIndexRef.current.set(conv.id, wsId);
-      } catch (e) {
-        console.error("[loop] reconstruct iterations on load failed", e);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [loaded]);
-
   // Persist history to disk. Reacts only to conversation changes (not workspace
   // selection) so switching the active session never rewrites the whole file.
   // Debounced while an agent is streaming; immediate when idle. The storage
@@ -725,8 +635,8 @@ export function useChat(engineModelConfigs: EngineModelConfigs) {
 
   // Listen to Tauri events — route updates by conversation_id, not active workspace.
   useEffect(() => {
-    let mounted = true;
     const batches = streamBatchesRef.current;
+    const pendingUnlistens: Array<() => void> = [];
 
     async function setup() {
       const u1 = await listen<ResponseChunk>("agent-response", (event) => {
@@ -735,6 +645,7 @@ export function useChat(engineModelConfigs: EngineModelConfigs) {
           batch.textParts.push({ content, eventType: event_type });
         });
       });
+      pendingUnlistens.push(u1);
 
       const u2 = await listen<ResponseDone>("agent-done", (event) => {
         const done = event.payload;
@@ -744,7 +655,11 @@ export function useChat(engineModelConfigs: EngineModelConfigs) {
             const msgs = [...conv.messages];
             const last = msgs[msgs.length - 1];
             if (last && last.role === "assistant") {
-              msgs[msgs.length - 1] = { ...last, content: done.full_text, status: "done", timestamp: Date.now() };
+              // Use full_text when available; fall back to the streaming-accumulated
+              // content when the backend sends an empty full_text (e.g. Android
+              // where the builtin engine may not capture the transcript).
+              const finalContent = done.full_text || last.content;
+              msgs[msgs.length - 1] = { ...last, content: finalContent, status: "done", timestamp: Date.now() };
             }
             return { ...conv, messages: msgs, updatedAt: Date.now() };
           }, convIndexRef),
@@ -762,9 +677,7 @@ export function useChat(engineModelConfigs: EngineModelConfigs) {
           const convId = done.conversation_id;
           const wsId = findWorkspaceForConversation(allConversationsRef.current, convId, convIndexRef);
           const conv = wsId ? allConversationsRef.current[wsId]?.find((c) => c.id === convId) : undefined;
-          // Skip per-turn KB summarization for loop iterations — a loop can run
-          // many turns and we don't want to spam the vault / burn tokens per iter.
-          if (conv && !conv.loopTaskId) {
+          if (conv) {
             const vault = getConfig().vaultPath ?? null;
             // Always invoke — backend falls back to <data_dir>/kb/ if vaultPath is null.
             const transcript = buildTranscript(conv.messages, done.full_text);
@@ -779,6 +692,7 @@ export function useChat(engineModelConfigs: EngineModelConfigs) {
           }
         }
       });
+      pendingUnlistens.push(u2);
 
       const u3 = await listen<ResponseError>("agent-error", (event) => {
         const err = event.payload;
@@ -800,6 +714,7 @@ export function useChat(engineModelConfigs: EngineModelConfigs) {
           return next;
         });
       });
+      pendingUnlistens.push(u3);
 
       const u4 = await listen<ResponseTool>("agent-tool", (event) => {
         const tool = event.payload;
@@ -807,6 +722,7 @@ export function useChat(engineModelConfigs: EngineModelConfigs) {
           batch.tools.push(tool);
         });
       });
+      pendingUnlistens.push(u4);
 
       const u5 = await listen<ResponseThinking>("agent-thinking", (event) => {
         const { conversation_id, tokens } = event.payload;
@@ -814,6 +730,7 @@ export function useChat(engineModelConfigs: EngineModelConfigs) {
           batch.thinkingTokens = tokens;
         });
       });
+      pendingUnlistens.push(u5);
 
       const u6 = await listen<ResponseUsage>("agent-usage", (event) => {
         const u = event.payload;
@@ -821,6 +738,7 @@ export function useChat(engineModelConfigs: EngineModelConfigs) {
           batch.usage = u;
         });
       });
+      pendingUnlistens.push(u6);
 
       const u7 = await listen<ResponseThinkingText>("agent-thinking-text", (event) => {
         const { conversation_id, content } = event.payload;
@@ -830,78 +748,18 @@ export function useChat(engineModelConfigs: EngineModelConfigs) {
             : content;
         });
       });
+      pendingUnlistens.push(u7);
 
-      // Permission request: the agent wants to run a tool and needs user approval.
-      const u8 = await listen<ResponsePermissionRequest>("agent-permission-request", (event) => {
-        const req = event.payload;
-        flushStreamBatches(req.conversation_id);
-        setAllConversations((prev) =>
-          patchConversation(prev, req.conversation_id, (conv) => {
-            const msgs = [...conv.messages];
-            const last = msgs[msgs.length - 1];
-            if (last && last.role === "assistant") {
-              const existing = last.pendingPermissions ?? [];
-              // Avoid duplicates (same requestId)
-              if (!existing.some((p) => p.requestId === req.request_id)) {
-                msgs[msgs.length - 1] = {
-                  ...last,
-                  pendingPermissions: [
-                    ...existing,
-                    { requestId: req.request_id, toolName: req.tool_name, input: req.input },
-                  ],
-                };
-              }
-            }
-            return { ...conv, messages: msgs };
-          }, convIndexRef),
-        );
-      });
-
-      // A loop iteration is starting: open a real (streaming) conversation for
-      // it so the existing agent-* listeners populate it live and it renders in
-      // the sidebar, folded under its loop via the loopTaskId marker.
-      const u9 = await listen<{
-        task_id: string;
-        task_name: string;
-        iteration: number;
-        conversation_id: string;
-        workspace: string;
-        engine: string;
-        prompt: string;
-      }>("loop-iteration-started", (event) => {
-        const p = event.payload;
-        const now = Date.now();
-        const conv: Conversation = {
-          id: p.conversation_id,
-          title: `Loop: ${p.task_name} #${p.iteration}`,
-          createdAt: now,
-          updatedAt: now,
-          engine: p.engine as AgentEngineId,
-          loopTaskId: p.task_id,
-          loopTaskName: p.task_name,
-          messages: [
-            { id: generateId(), role: "user", content: p.prompt, timestamp: now, status: "done" },
-            { id: generateId(), role: "assistant", content: "", timestamp: now, status: "streaming" },
-          ],
-        };
-        const wsId = p.workspace;
-        convIndexRef.current.set(p.conversation_id, wsId);
-        setAllConversations((prev) => {
-          const list = prev[wsId] ?? [];
-          const without = list.filter((c) => c.id !== conv.id);
-          return { ...prev, [wsId]: [conv, ...without] };
-        });
-        setGeneratingIds((prev) => new Set(prev).add(p.conversation_id));
-      });
-
-      if (!mounted) { u1(); u2(); u3(); u4(); u5(); u6(); u7(); u8(); u9(); return; }
-      unlistenRefs.current = [u1, u2, u3, u4, u5, u6, u7, u8, u9];
+      unlistenRefs.current = pendingUnlistens;
     }
 
     setup();
     return () => {
-      mounted = false;
-      for (const fn of unlistenRefs.current) fn();
+      // Unlisten any listeners that have already been registered (pendingUnlistens
+      // accumulates them as each await resolves), plus any from a prior render cycle
+      // still in unlistenRefs.current.
+      const all = [...pendingUnlistens, ...unlistenRefs.current];
+      for (const fn of all) fn();
       unlistenRefs.current = [];
       batches.clear();
       streamFlushScheduledRef.current = false;
@@ -1097,26 +955,41 @@ export function useChat(engineModelConfigs: EngineModelConfigs) {
       const currentConv = allConversationsRef.current[wsId]?.find((c) => c.id === convId);
       const engine = currentConv?.engine ?? defaultEngine;
       const convModel = currentConv?.model || undefined;
-      // Only --resume when a prior turn completed successfully on the backend.
-      // Using user-message count alone breaks retries: after a failed first
-      // attempt (spawn error / no CodeBuddy session) we'd pass --resume and get
-      // "No conversation found with session ID".
-      const isContinue = currentConv
-        ? currentConv.messages.some((m) => m.role === "assistant" && m.status === "done")
-        : false;
 
-      // Ensure backend cwd matches the conversation's workspace before spawning.
+      // Ensure backend cwd matches the conversation's workspace before the agent runs.
       await invoke("set_active_workspace", { path: wsId }).catch(() => {});
 
       try {
-        await invoke("send_message", {
+        const result: string | null = await invoke("send_message", {
           message: content,
           conversationId: convId,
           engine,
-          isContinue,
           model: convModel,
-          // Omit when empty so the backend's Option<Vec> deserializes to None.
           ...(images && images.length > 0 ? { images } : {}),
+        });
+        // The backend now returns the full response text directly (no
+        // longer fire-and-forget via tokio::spawn). Use the result to set
+        // the assistant message content — this ensures Android works even
+        // when the Tauri emit push channel is unavailable in dev mode.
+        if (result) {
+          setAllConversations((prev) =>
+            patchConversation(prev, convId!, (conv) => {
+              const msgs = [...conv.messages];
+              const last = msgs[msgs.length - 1];
+              if (last && last.role === "assistant") {
+                // Use the direct result; fall back to streaming-accumulated
+                // content if result is empty (edge case).
+                const finalContent = result || last.content;
+                msgs[msgs.length - 1] = { ...last, content: finalContent, status: "done", timestamp: Date.now() };
+              }
+              return { ...conv, messages: msgs, updatedAt: Date.now() };
+            }, convIndexRef),
+          );
+        }
+        setGeneratingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(convId!);
+          return next;
         });
       } catch (e) {
         setError(String(e));
@@ -1162,37 +1035,6 @@ export function useChat(engineModelConfigs: EngineModelConfigs) {
       }, convIndexRef),
     );
   }, [activeId]);
-
-  const respondPermission = useCallback(
-    async (convId: string, requestId: string, allow: boolean) => {
-      try {
-        await invoke("respond_permission", {
-          conversationId: convId,
-          allow,
-          message: allow ? undefined : "User denied",
-        });
-      } catch (e) {
-        console.error("[respondPermission] failed:", e);
-      }
-      // Remove the pending permission from the message
-      setAllConversations((prev) =>
-        patchConversation(prev, convId, (conv) => {
-          const msgs = [...conv.messages];
-          const last = msgs[msgs.length - 1];
-          if (last && last.role === "assistant" && last.pendingPermissions) {
-            msgs[msgs.length - 1] = {
-              ...last,
-              pendingPermissions: last.pendingPermissions.filter(
-                (p) => p.requestId !== requestId,
-              ),
-            };
-          }
-          return { ...conv, messages: msgs };
-        }, convIndexRef),
-    );
-  },
-  [],
-);
 
   const clearError = useCallback(() => { setError(null); }, []);
 
@@ -1325,31 +1167,6 @@ export function useChat(engineModelConfigs: EngineModelConfigs) {
     }
   }, []);
 
-  /** One-click login: spawn the engine's login command (opens a browser). */
-  const engineLogin = useCallback(async (engineId: AgentEngineId) => {
-    try {
-      await invoke("engine_login", { engine: engineId });
-    } catch (e) {
-      console.error("[engine_login] failed", engineId, e);
-    }
-  }, []);
-
-  /** One-click install: run the engine's install command, then (on success)
-   *  re-check the binary so the card flips to 已安装 and the probe effect picks
-   *  it up. Returns { success, output } so the caller can show errors. */
-  const installEngine = useCallback(
-    async (engineId: AgentEngineId): Promise<{ success: boolean; output: string }> => {
-      const res = await invoke<{ success: boolean; output: string }>("install_engine", {
-        engine: engineId,
-      });
-      if (res.success) {
-        await refreshEngineStatuses();
-      }
-      return res;
-    },
-    [refreshEngineStatuses],
-  );
-
   const anyEngineAvailable = (engineStatuses ?? []).some((s) => s.available);
 
   /** At least one engine is logged in and working (or was last session — see
@@ -1396,11 +1213,8 @@ export function useChat(engineModelConfigs: EngineModelConfigs) {
     deleteConversation,
     sendMessage,
     stopGeneration,
-    respondPermission,
     refreshEngineStatuses,
     probeEngineStatus,
-    engineLogin,
-    installEngine,
     anyEngineReady,
     readyEngineIds,
     clearError,

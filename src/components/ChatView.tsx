@@ -9,7 +9,6 @@ interface ChatViewProps {
   conversation: Conversation | null;
   isGenerating: boolean;
   onOpenPreview: (t: PreviewRequest) => void;
-  onRespondPermission?: (convId: string, requestId: string, allow: boolean) => void;
 }
 
 function TypingIndicator() {
@@ -64,7 +63,7 @@ function WelcomeScreen() {
   );
 }
 
-export default function ChatView({ conversation, isGenerating, onOpenPreview, onRespondPermission }: ChatViewProps) {
+export default function ChatView({ conversation, isGenerating, onOpenPreview }: ChatViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   // Previous message count — used to detect when the user sends a new turn.
   const prevCountRef = useRef(0);
@@ -128,7 +127,7 @@ export default function ChatView({ conversation, isGenerating, onOpenPreview, on
       >
         <div className="max-w-4xl mx-auto w-full">
           {conversation.messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} onOpenPreview={onOpenPreview} onRespondPermission={onRespondPermission} conversationId={conversation.id} />
+            <MessageBubble key={msg.id} message={msg} onOpenPreview={onOpenPreview} />
           ))}
 
           {/* Show typing indicator when the last message is a user message and we're generating */}

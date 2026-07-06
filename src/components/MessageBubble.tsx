@@ -2,17 +2,18 @@ import { memo, useState, useCallback, useEffect, useRef, useMemo, type ReactNode
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
-import type { Message, MessageUsage, PreviewRequest, ToolStep, PendingPermission } from "../types";
+// Registers the curated language set on the shared refractor singleton that
+// PrismLight (and highlight.ts) both use. Side-effect-only by design.
+import "../lib/refractor";
+import type { Message, MessageUsage, PreviewRequest, ToolStep } from "../types";
 import { isPreviewableFile } from "../preview";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 interface MessageBubbleProps {
   message: Message;
   onOpenPreview: (t: PreviewRequest) => void;
-  onRespondPermission?: (convId: string, requestId: string, allow: boolean) => void;
-  conversationId?: string;
 }
 
 /** Render user message content, detecting and collapsing KB context blocks. */
@@ -582,74 +583,6 @@ function ToolActivity({ tools, onOpenPreview }: { tools: ToolStep[]; onOpenPrevi
   );
 }
 
-// ---------------------------------------------------------------------------
-// Permission request card
-// ---------------------------------------------------------------------------
-
-/** Describe a tool permission request for display. */
-function describePermissionRequest(perm: PendingPermission): { label: string; detail?: string } {
-  const n = perm.toolName.toLowerCase();
-  const input = perm.input as Record<string, unknown> | null;
-  const pick = (...keys: string[]): string | undefined => {
-    for (const k of keys) {
-      const v = input?.[k];
-      if (typeof v === "string" && v.trim()) return v;
-    }
-    return undefined;
-  };
-
-  switch (n) {
-    case "bash": return { label: "Run command", detail: pick("command") };
-    case "edit": case "multiedit": return { label: "Edit file", detail: pick("file_path") };
-    case "write": return { label: "Write file", detail: pick("file_path") };
-    case "read": return { label: "Read file", detail: pick("file_path") };
-    case "askuserquestion": return { label: "Ask question", detail: pick("question") };
-    default: return { label: perm.toolName };
-  }
-}
-
-function PermissionCard({
-  perm,
-  onRespond,
-}: {
-  perm: PendingPermission;
-  onRespond: (requestId: string, allow: boolean) => void;
-}) {
-  const { label, detail } = describePermissionRequest(perm);
-  const input = perm.input as Record<string, unknown> | null;
-  return (
-    <div className="permission-card">
-      <div className="permission-card-header">
-        <span className="permission-icon">🔒</span>
-        <span className="permission-label">{label}</span>
-        {detail && <span className="permission-detail">{detail.length > 120 ? detail.slice(0, 120) + " …" : detail}</span>}
-      </div>
-      {perm.toolName.toLowerCase() === "bash" && input?.command && typeof input.command === "string" ? (
-        <pre className="permission-command">{input.command}</pre>
-      ) : null}
-      {perm.toolName.toLowerCase() === "askuserquestion" && input?.question && typeof input.question === "string" ? (
-        <p className="permission-question">{input.question}</p>
-      ) : null}
-      <div className="permission-actions">
-        <button
-          className="permission-btn permission-btn--deny"
-          onClick={() => onRespond(perm.requestId, false)}
-          type="button"
-        >
-          Deny
-        </button>
-        <button
-          className="permission-btn permission-btn--allow"
-          onClick={() => onRespond(perm.requestId, true)}
-          type="button"
-        >
-          Allow
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function ThinkingCard({ message }: { message: Message }) {
   const [open, setOpen] = useState(false);
   const hasRunningTool = (message.tools ?? []).some((t) => t.status === "running");
@@ -753,7 +686,7 @@ function UsageStats({ usage }: { usage: MessageUsage }) {
   );
 }
 
-function MessageBubbleImpl({ message, onOpenPreview, onRespondPermission, conversationId }: MessageBubbleProps) {
+function MessageBubbleImpl({ message, onOpenPreview }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const isStreamingAssistant = !isUser && message.status === "streaming";
   const time = isUser
@@ -867,18 +800,6 @@ function MessageBubbleImpl({ message, onOpenPreview, onRespondPermission, conver
               <ToolActivity tools={message.tools} onOpenPreview={onOpenPreview} />
             )}
 
-            {message.pendingPermissions && message.pendingPermissions.length > 0 && conversationId && onRespondPermission && (
-              <div className="permission-requests">
-                {message.pendingPermissions.map((perm) => (
-                  <PermissionCard
-                    key={perm.requestId}
-                    perm={perm}
-                    onRespond={(requestId, allow) => onRespondPermission(conversationId, requestId, allow)}
-                  />
-                ))}
-              </div>
-            )}
-
             <ThinkingCard message={message} />
 
             <div
@@ -927,9 +848,9 @@ function MessageBubbleImpl({ message, onOpenPreview, onRespondPermission, conver
  * `useChat` rebuilds the whole conversation tree on every stream batch, but
  * `applyStreamBatch` only creates a new object for the streaming message — every
  * earlier message keeps its reference, so a shallow memo skips re-running
- * ReactMarkdown / Prism for the entire history. Without this, a verbose engine
- * (e.g. CodeBuddy with live deltas, code blocks and many tool steps) re-parses
- * the whole transcript ~60×/s and freezes the page.
+ * ReactMarkdown / Prism for the entire history. Without this, a verbose turn
+ * (live deltas, code blocks and many tool steps) re-parses the whole
+ * transcript ~60×/s and freezes the page.
  */
 const MessageBubble = memo(MessageBubbleImpl);
 

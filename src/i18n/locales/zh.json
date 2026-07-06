@@ -26,50 +26,12 @@
   "splash": {
     "initializing": "初始化中..."
   },
-  "engineSetup": {
-    "title": "配置 Agent 引擎",
-    "description": "Pixie 不自带模型，安装并登录一个引擎即可。检测就绪 = 能成功 ping 通该模型。",
-    "hint": "提示：检测会向引擎发送一条 ping 消息，可能产生极少量调用费用。",
-    "close": "关闭",
-    "enterApp": "进入应用",
-    "anyReady": "已有引擎就绪",
-    "noneReady": "还没有就绪的引擎",
-    "status": {
-      "builtin": "内置",
-      "ready": "就绪",
-      "probing": "检测中...",
-      "notInstalled": "未安装",
-      "notReady": "未就绪"
-    },
-    "actions": {
-      "oneClickInstall": "一键安装",
-      "installing": "安装中...",
-      "oneClickLogin": "一键登录",
-      "reprobe": "重新检测",
-      "manualInstall": "手动安装（复制命令到终端运行）",
-      "copyLoginCommand": "复制登录命令"
-    },
-    "messages": {
-      "builtinConfigHint": "请在设置页面 → 引擎配置 → Builtin 中配置 ANTHROPIC_API_KEY。",
-      "builtinDesc": "内置引擎直接调用 Anthropic Messages API，无需安装 CLI，只需配置 API Key。",
-      "notReadyHint": "未就绪。点「一键登录」在浏览器登录，完成后点「重新检测」。",
-      "readyMessage": "已就绪，可以使用。",
-      "installFailed": "安装失败，请用下方命令手动安装",
-      "engineResponse": "引擎返回："
-    },
-    "commands": {
-      "copy": "复制",
-      "copyToClipboard": "复制到剪贴板"
-    }
-  },
   "sidebar": {
     "newChat": "新建对话",
     "workspaces": "工作区",
     "addWorkspace": "添加工作区",
     "settings": "设置",
     "tasks": "计划任务",
-    "loops": "循环任务",
-    "skills": "技能市场",
     "noWorkspaces": "暂无工作区",
     "recentChats": "最近对话"
   },
@@ -108,7 +70,6 @@
     "systemPrompt": "系统提示词",
     "systemPromptPlaceholder": "输入代理的系统提示词...",
     "about": "关于",
-    "aboutDescription": "一个通用的桌面 AI 代理工作区。支持 Claude、Cursor 和 CodeBuddy 引擎。",
     "builtWith": "基于 Tauri v2 + React + TypeScript 构建",
     "version": "版本",
     "keyboardShortcuts": "键盘快捷键",
@@ -137,53 +98,15 @@
     "prompt": "提示词",
     "workspace": "工作区"
   },
-  "loops": {
-    "title": "循环任务",
-    "create": "创建循环任务",
-    "start": "开始",
-    "pause": "暂停",
-    "resume": "继续",
-    "stop": "停止",
-    "discard": "放弃",
-    "running": "运行中",
-    "paused": "已暂停",
-    "status": "状态"
-  },
-  "marketplace": {
-    "title": "技能市场",
-    "search": "搜索技能...",
-    "install": "安装",
-    "uninstall": "卸载",
-    "installed": "已安装",
-    "noSkills": "暂无可用技能"
-  },
   "search": {
     "title": "搜索知识库",
     "placeholder": "搜索笔记和对话...",
     "noResults": "未找到结果",
     "openInObsidian": "在 Obsidian 中打开"
   },
-  "updater": {
-    "checkForUpdates": "检查更新",
-    "checking": "检查中...",
-    "downloading": "下载中...",
-    "upToDate": "已是最新版本",
-    "available": "有新版本可用",
-    "install": "安装",
-    "restartNow": "立即重启",
-    "tryBeta": "尝试 Beta 版",
-    "tryBetaHint": "安装最新的 Beta（预发布）版本以尽早尝试新功能"
-  },
   "language": {
     "title": "语言",
     "select": "选择语言",
     "current": "当前语言"
-  },
-  "engines": {
-    "claude": "Claude",
-    "cursor": "Cursor",
-    "codebuddy": "CodeBuddy",
-    "builtin": "内置",
-    "codex": "Codex"
   }
 }

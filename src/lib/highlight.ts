@@ -1,4 +1,4 @@
-import { refractor } from "refractor";
+import { refractor } from "./refractor";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 /**

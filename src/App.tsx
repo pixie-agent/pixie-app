@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useDragRegion } from "./hooks/useDragRegion";
+import { open } from "@tauri-apps/plugin-shell";
+import { useIsMobile } from "./hooks/useIsMobile";
 import Sidebar from "./components/Sidebar";
 import InputBar from "./components/InputBar";
-import { openExternal } from "./openExternal";
 import { useChat } from "./hooks/useChat";
 import EngineBadge from "./components/EngineBadge";
 
@@ -13,13 +13,10 @@ import EngineBadge from "./components/EngineBadge";
 // loads or the component re-mounts after a workspace switch.
 const ChatView = lazy(() => import("./components/ChatView"));
 const Settings = lazy(() => import("./components/Settings"));
-const MarketplacePanel = lazy(() => import("./components/MarketplacePanel"));
 const ScheduledTasksPanel = lazy(() => import("./components/ScheduledTasksPanel"));
-const LoopTasksPanel = lazy(() => import("./components/LoopTasksPanel"));
 const FileExplorer = lazy(() => import("./components/RightPanel"));
 const SearchPalette = lazy(() => import("./components/SearchPalette"));
 import { useScheduledTasks } from "./hooks/useScheduledTasks";
-import { useLoopTasks } from "./hooks/useLoopTasks";
 import type {
   AgentEngineId,
   AuthState,
@@ -71,55 +68,24 @@ function SplashScreen() {
 /// Builtin engine setup information shown on the setup screen.
 const ENGINE_SETUP_INFO: Record<
   AgentEngineId,
-  { install: string; login: string; loginHint?: string; docs: string }
+  { loginHint?: string; docs: string }
 > = {
   builtin: {
-    install: "（内置引擎，无需安装）",
-    login: "",
     loginHint: "在设置页面配置 ANTHROPIC_API_KEY 即可使用",
     docs: "https://docs.anthropic.com/en/api",
   },
 };
-
-function CommandRow({ command, label }: { command: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="flex items-center gap-2">
-      <code className="flex-1 text-xs font-mono text-[var(--text-primary)] bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg px-3 py-2 overflow-x-auto whitespace-nowrap">
-        {command}
-      </code>
-      <button
-        onClick={() => {
-          navigator.clipboard
-            .writeText(command)
-            .then(() => {
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1500);
-            })
-            .catch(() => {});
-        }}
-        className="shrink-0 px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] text-xs font-medium transition-colors hover:opacity-80"
-      >
-        {copied ? "已复制" : label}
-      </button>
-    </div>
-  );
-}
 
 function EngineCard({
   engineId,
   label,
   status,
   onProbe,
-  onLogin,
-  onInstall,
 }: {
   engineId: AgentEngineId;
   label: string;
   status: EngineStatus | undefined;
   onProbe: (id: AgentEngineId) => void;
-  onLogin: (id: AgentEngineId) => void;
-  onInstall: (id: AgentEngineId) => Promise<{ success: boolean; output: string }>;
 }) {
   const isBuiltin = engineId === "builtin";
   const info = ENGINE_SETUP_INFO[engineId];
@@ -128,21 +94,6 @@ function EngineCard({
   const ready = installed && authState === "ready";
   const notReady = installed && !ready;
   const probing = installed && authState === "unknown" && (!isBuiltin || !!status?.available);
-  const [installing, setInstalling] = useState(false);
-  const [installError, setInstallError] = useState<string | null>(null);
-
-  const handleInstall = async () => {
-    setInstalling(true);
-    setInstallError(null);
-    try {
-      const res = await onInstall(engineId);
-      if (!res.success) setInstallError(res.output || "安装失败，请用下方命令手动安装");
-    } catch (e) {
-      setInstallError(String(e));
-    } finally {
-      setInstalling(false);
-    }
-  };
 
   return (
     <div className="border border-[var(--border-color)] rounded-xl p-4 bg-[var(--bg-primary)]">
@@ -187,34 +138,6 @@ function EngineCard({
         </div>
       )}
 
-      {!isBuiltin && !installed && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleInstall}
-              disabled={installing}
-              className="px-3 py-1.5 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-xs font-medium transition-colors disabled:opacity-50"
-            >
-              {installing ? "安装中…" : "一键安装"}
-            </button>
-            {installing && (
-              <div className="w-3.5 h-3.5 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
-            )}
-          </div>
-          {installError && (
-            <p className="text-xs text-red-400 break-all whitespace-pre-wrap">{installError}</p>
-          )}
-          <details className="text-[11px] text-[var(--text-secondary)]">
-            <summary className="cursor-pointer hover:text-[var(--text-primary)]">
-              手动安装（复制命令到终端运行）
-            </summary>
-            <div className="mt-1">
-              <CommandRow command={info.install} label="复制" />
-            </div>
-          </details>
-        </div>
-      )}
-
       {probing && (
         <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
           <div className="w-3.5 h-3.5 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
@@ -224,33 +147,8 @@ function EngineCard({
 
       {ready && <p className="text-xs text-emerald-400">已就绪，可以使用。</p>}
 
-      {!isBuiltin && notReady && !probing && (
-        <div className="space-y-2">
-          <p className="text-xs text-amber-400">未就绪。点「一键登录」在浏览器登录，完成后点「重新检测」。</p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => onLogin(engineId)}
-              className="px-3 py-1.5 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-xs font-medium transition-colors"
-            >
-              一键登录
-            </button>
-            <button
-              onClick={() => onProbe(engineId)}
-              className="px-3 py-1.5 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] text-xs font-medium transition-colors hover:opacity-80"
-            >
-              重新检测
-            </button>
-          </div>
-          <CommandRow command={info.login} label="复制登录命令" />
-          {info.loginHint && (
-            <p className="text-[11px] text-[var(--text-secondary)]">{info.loginHint}</p>
-          )}
-          {status?.probe_error && (
-            <p className="text-[11px] text-[var(--text-secondary)] break-all">
-              引擎返回：{status.probe_error}
-            </p>
-          )}
-        </div>
+      {isBuiltin && notReady && !probing && info.loginHint && (
+        <p className="text-[11px] text-[var(--text-secondary)]">{info.loginHint}</p>
       )}
 
       {installed && ready && (
@@ -270,14 +168,10 @@ function EngineCard({
 function EngineSetup({
   statuses,
   onProbe,
-  onLogin,
-  onInstall,
   onClose,
 }: {
   statuses: EngineStatus[];
   onProbe: (id: AgentEngineId) => void;
-  onLogin: (id: AgentEngineId) => void;
-  onInstall: (id: AgentEngineId) => Promise<{ success: boolean; output: string }>;
   onClose: () => void;
 }) {
   const anyReady = statuses.some((s) => s.available && s.auth_state === "ready");
@@ -311,8 +205,6 @@ function EngineSetup({
               label={e.label}
               status={statuses.find((s) => s.id === e.id)}
               onProbe={onProbe}
-              onLogin={onLogin}
-              onInstall={onInstall}
             />
           ))}
           <p className="text-[11px] text-[var(--text-secondary)] pt-1">
@@ -338,16 +230,16 @@ function EngineSetup({
 
 function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const isMobile = useIsMobile();
   const [fileExplorerOpen, setFileExplorerOpen] = useState(false);
   const [headerEditing, setHeaderEditing] = useState(false);
   const [headerEditValue, setHeaderEditValue] = useState("");
   const headerEditRef = useRef<HTMLInputElement>(null);
-  const handleDragRegion = useDragRegion();
   // Externally-requested preview target (a path/URL clicked in a chat message).
   const [previewTarget, setPreviewTarget] = useState<PreviewTarget | null>(null);
   // Which full-page view the main column shows. The sidebar buttons switch
   // this; New Agent / selecting a conversation returns to "chat".
-  const [mainView, setMainView] = useState<"chat" | "tasks" | "loops" | "skills" | "settings">("chat");
+  const [mainView, setMainView] = useState<"chat" | "tasks" | "settings">("chat");
   const [theme, setTheme] = useState<"dark" | "light">(() => getConfig().theme);
   const [systemPrompt, setSystemPrompt] = useState(() => getConfig().systemPrompt);
   const [engineModelConfigs, setEngineModelConfigs] = useState<EngineModelConfigs>(
@@ -382,8 +274,6 @@ function AppShell() {
     anyEngineReady,
     readyEngineIds,
     probeEngineStatus,
-    engineLogin,
-    installEngine,
     defaultEngine,
     setDefaultEngine,
     defaultWorkspacePath,
@@ -403,7 +293,6 @@ function AppShell() {
     deleteConversation,
     sendMessage,
     stopGeneration,
-    respondPermission,
     refreshEngineStatuses,
     clearError,
     addScheduledRun,
@@ -465,22 +354,6 @@ function AppShell() {
     runNow: runTaskNow,
   } = useScheduledTasks();
 
-  const {
-    tasks: loopTasks,
-    iterations: loopIterations,
-    create: createLoopTask,
-    update: updateLoopTask,
-    remove: deleteLoopTask,
-    toggle: toggleLoopTask,
-    start: startLoopTask,
-    pause: pauseLoopTask,
-    resume: resumeLoopTask,
-    resumeWithPrompt: resumeLoopTaskWithPrompt,
-    stop: stopLoopTask,
-    discard: discardLoopTask,
-    loadIterations: loadLoopIterations,
-  } = useLoopTasks();
-
   // Surface completed scheduled runs as conversations in their workspace, so the
   // result is viewable like any chat. On first load we seed the seen-set with all
   // existing run ids so historical runs are NOT backfilled into the sidebar — only
@@ -536,30 +409,6 @@ function AppShell() {
   useEffect(() => {
     reloadSkills();
   }, [reloadSkills]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === "n") {
-        e.preventDefault();
-        setMainView("chat");
-        createConversation(undefined, defaultEngine);
-      }
-      if (e.key === "Escape" && isGenerating) {
-        e.preventDefault();
-        stopGeneration();
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === ",") {
-        e.preventDefault();
-        setMainView((prev) => (prev === "settings" ? "chat" : "settings"));
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
-        e.preventDefault();
-        setSearchOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [createConversation, defaultEngine, isGenerating, stopGeneration]);
 
   const handleThemeChange = useCallback((t: "dark" | "light") => setTheme(t), []);
   const handleSystemPromptChange = useCallback((prompt: string) => setSystemPrompt(prompt), []);
@@ -691,26 +540,10 @@ function AppShell() {
     return s;
   }
 
-  const handleOpenObsidian = useCallback(async () => {
-    try {
-      const installed = await invoke<boolean>("check_obsidian_installed");
-      if (!installed) {
-        alert("Obsidian is not installed. Download it from https://obsidian.md to view your knowledge base.");
-        return;
-      }
-      const vaultPath = getConfig().vaultPath ?? null;
-      await invoke("open_vault_in_obsidian", { vaultPath });
-    } catch { /* ignore */ }
-  }, []);
-
-  // Open a file path or URL in the right-side preview panel (clicked in a chat
-  // message). The nonce lets the same target be re-opened.
-  // Open a file path or URL from a chat message. URLs are delegated to the
-  // system default browser (Pixie no longer embeds a browser); file paths open
-  // in the right-side preview panel. The nonce lets the same file be re-opened.
+  // Open a URL from a chat message in the system browser via Tauri shell plugin.
   const handleOpenPreview = useCallback((t: PreviewRequest) => {
     if (t.kind === "url") {
-      void openExternal(t.url);
+      void open(t.url);
       return;
     }
     const nonce = Date.now();
@@ -752,8 +585,6 @@ ${entries}
         <EngineSetup
           statuses={engineStatuses}
           onProbe={probeEngineStatus}
-          onLogin={engineLogin}
-          onInstall={installEngine}
           onClose={() => setSetupOpen(false)}
         />
       )}
@@ -767,10 +598,12 @@ ${entries}
         onSelect={(id, workspaceId) => {
           setMainView("chat");
           switchConversation(id, workspaceId);
+          if (isMobile) setSidebarOpen(false);
         }}
         onNew={(opts) => {
           setMainView("chat");
           createConversation(opts?.workspaceId, opts?.engine ?? defaultEngine, opts?.model);
+          if (isMobile) setSidebarOpen(false);
         }}
         defaultEngine={defaultEngine}
         onDefaultEngineChange={setDefaultEngine}
@@ -781,22 +614,18 @@ ${entries}
         onAddWorkspace={addWorkspace}
         onRemoveWorkspace={removeWorkspace}
         onSetWorkspaceFilter={setWorkspaceFilter}
-        onOpenSettings={() => setMainView("settings")}
-        onOpenTasks={() => setMainView("tasks")}
-        onOpenLoops={() => setMainView("loops")}
-        onOpenSkills={() => setMainView("skills")}
+        onOpenSettings={() => { setMainView("settings"); if (isMobile) setSidebarOpen(false); }}
+        onOpenTasks={() => { setMainView("tasks"); if (isMobile) setSidebarOpen(false); }}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        loopTasks={loopTasks}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
         {mainView === "chat" && (
           <>
-            {/* Header — drag empty areas to move window */}
+            {/* Header */}
             <header
-              className={`relative shrink-0 flex items-center px-4 py-3 border-b border-[var(--border-color)] bg-[var(--bg-primary)] ${navigator.platform?.includes("Mac") && !sidebarOpen ? "pl-20" : ""}`}
-              onMouseDown={handleDragRegion}
+              className={`relative shrink-0 flex items-center px-4 py-3 border-b border-[var(--border-color)] bg-[var(--bg-primary)]`}
             >
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 {!sidebarOpen && (
@@ -888,17 +717,6 @@ ${entries}
                 </svg>
               </button>
               <button
-                onClick={handleOpenObsidian}
-                className="shrink-0 ml-1 p-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--text-secondary)]/10 hover:text-[var(--text-primary)] transition-colors"
-                title="Open knowledge base in Obsidian"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <ellipse cx="12" cy="6" rx="8" ry="3" />
-                  <path d="M4 6v6c0 1.5 3.5 3 8 3s8-1.5 8-3V6" />
-                  <path d="M4 12v6c0 1.5 3.5 3 8 3s8-1.5 8-3v-6" />
-                </svg>
-              </button>
-              <button
                 onClick={() => setFileExplorerOpen((prev) => !prev)}
                 disabled={!activeWorkspace}
                 className={`shrink-0 ml-2 p-1.5 rounded-lg bg-[var(--bg-primary)] transition-colors ${
@@ -924,7 +742,7 @@ ${entries}
             )}
 
             <Suspense fallback={<LoadingPanel />}>
-              <ChatView conversation={activeConversation} isGenerating={isGenerating} onOpenPreview={handleOpenPreview} onRespondPermission={respondPermission} />
+              <ChatView conversation={activeConversation} isGenerating={isGenerating} onOpenPreview={handleOpenPreview} />
             </Suspense>
 
             <InputBar
@@ -1003,38 +821,6 @@ ${entries}
           </Suspense>
         )}
 
-        {mainView === "loops" && (
-          <Suspense fallback={<LoadingPanel />}>
-          <LoopTasksPanel
-            workspaces={workspaces}
-            activeWorkspacePath={activeWorkspace?.path ?? null}
-            tasks={loopTasks}
-            iterations={loopIterations}
-            onCreate={createLoopTask}
-            onUpdate={updateLoopTask}
-            onDelete={deleteLoopTask}
-            onToggle={toggleLoopTask}
-            onStart={startLoopTask}
-            onPause={pauseLoopTask}
-            onResume={resumeLoopTask}
-            onResumeWithPrompt={resumeLoopTaskWithPrompt}
-            onStop={stopLoopTask}
-            onDiscard={discardLoopTask}
-            onLoadIterations={loadLoopIterations}
-            onClose={() => setMainView("chat")}
-          />
-          </Suspense>
-        )}
-
-        {mainView === "skills" && (
-          <Suspense fallback={<LoadingPanel />}>
-          <MarketplacePanel
-            onClose={() => setMainView("chat")}
-            onSkillsChanged={reloadSkills}
-          />
-          </Suspense>
-        )}
-
         {mainView === "settings" && (
           <Suspense fallback={<LoadingPanel />}>
           <Settings
@@ -1067,14 +853,18 @@ ${entries}
 
       {/* The right panel stays mounted while a workspace is active and is just
           hidden via `display` when closed, so its state survives close/reopen.
-          It is NOT keyed by workspace, so the per-workspace terminals mounted
-          inside it also persist across workspace switches. */}
+          It is NOT keyed by workspace, so its per-workspace state persists
+          across workspace switches. */}
       {activeWorkspace?.path && (
-        <div className="h-full" style={{ display: fileExplorerOpen ? "block" : "none" }}>
+        <div
+          className="h-full fixed inset-0 z-40 lg:relative"
+          style={{ display: fileExplorerOpen ? "block" : "none" }}
+        >
           <Suspense fallback={<LoadingPanel />}>
           <FileExplorer
             workspacePath={activeWorkspace.path}
             previewTarget={previewTarget}
+            onClose={() => setFileExplorerOpen(false)}
           />
           </Suspense>
         </div>

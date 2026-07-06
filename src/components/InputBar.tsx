@@ -1,7 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import type { UnlistenFn } from "@tauri-apps/api/event";
 import SkillsDropdown from "./SkillsDropdown";
 import type { SkillEntry, AgentEngineId, EngineModelConfigs, ModelEntry } from "../types";
 import { ENGINE_MODEL_ENV_KEY } from "../types";
@@ -109,7 +107,6 @@ export default function InputBar({
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [customModelInput, setCustomModelInput] = useState("");
   const [availableModels, setAvailableModels] = useState<ModelEntry[]>([]);
-  const [dragActive, setDragActive] = useState(false);
   /** Absolute file paths staged as attachments. On send these become @mentions
    *  appended to the message so Claude Code pulls them in as context. */
   const [attachments, setAttachments] = useState<string[]>([]);
@@ -176,36 +173,14 @@ export default function InputBar({
   // Native file drag-and-drop. Tauri intercepts OS-level drops and emits the
   // real file paths here (the webview's own HTML5 drop event only yields fake
   // `C:\fakepath\...` paths). Subscribed once on mount; the accept gate lives
-  // in acceptInputRef so we don't resubscribe on every state change.
-  useEffect(() => {
-    const win = getCurrentWindow();
-    let unlisten: UnlistenFn | undefined;
-    win.onDragDropEvent((event) => {
-      const payload = event.payload;
-      if (payload.type === "enter" || payload.type === "over") {
-        setDragActive(true);
-      } else if (payload.type === "leave") {
-        setDragActive(false);
-      } else if (payload.type === "drop") {
-        setDragActive(false);
-        if (!acceptInputRef.current) return;
-        addAttachments(payload.paths);
-      }
-    }).then((un) => {
-      unlisten = un;
-    });
-    return () => {
-      unlisten?.();
-    };
-  }, [addAttachments]);
 
   const handleSend = useCallback(() => {
     const trimmed = value.trim();
     if (isGenerating || disabled) return;
     if (!trimmed && attachments.length === 0) return;
-    // Image attachments are handed to the backend as paths (`images`): Claude/
-    // CodeBuddy embed them as native image content blocks, Cursor as @mentions.
-    // Other files still become @mentions relative to the workspace.
+    // Image attachments are handed to the backend as paths (`images`) and
+    // embedded as native image content blocks. Other files become @mentions
+    // relative to the workspace.
     const imagePaths = attachments.filter(isImagePath);
     const mentions = attachments
       .filter((p) => !isImagePath(p))
@@ -460,11 +435,7 @@ export default function InputBar({
         )}
 
         <div
-          className={`flex items-end bg-[var(--bg-secondary)] border rounded-2xl focus-within:border-[var(--accent)] transition-colors ${
-            dragActive
-              ? "border-[var(--accent)] ring-2 ring-[var(--accent)]/40 bg-[var(--bg-tertiary)]"
-              : "border-[var(--border-color)]"
-          }`}
+          className="flex items-end bg-[var(--bg-secondary)] border rounded-2xl focus-within:border-[var(--accent)] transition-colors border-[var(--border-color)]"
         >
           <textarea
             ref={textareaRef}

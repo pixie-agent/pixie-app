@@ -1,49 +1,40 @@
 # Pixie
 
-> A native desktop workspace for **pluggable AI agents** — a general-purpose agent that handles programming, office documents, data analysis, news, writing, and more. Run autonomous agents against any folder, swap engines per session, and watch them work in real time. Built-in **knowledge base** auto-summarizes conversations into searchable, linkable notes. Built with Tauri v2, React, TypeScript, and Rust.
+> A native AI agent workspace with a built-in engine — a general-purpose agent that handles programming, writing, data analysis, notes, and more. Run agents against any folder and watch them work in real time. A built-in **knowledge base** auto-summarizes conversations into searchable, linkable notes. Built with Tauri v2, React, TypeScript, and Rust; ships as an Android app.
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Tauri](https://img.shields.io/badge/Tauri-v2-blue.svg)
-![Agents](https://img.shields.io/badge/engines-Claude%20%7C%20Cursor%20%7C%20CodeBuddy-orange.svg)
-![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)
+![Engine](https://img.shields.io/badge/engine-built--in%20Anthropic%20API-orange.svg)
+![Platform](https://img.shields.io/badge/platform-Android-blue.svg)
 
 ![Pixie](src/assets/hero.svg)
 
-Pixie is a thin, fast desktop shell for **agent CLIs you already have installed**. It does not ship its own model or API client — it spawns an external agent process, streams its JSON output, and renders it as a polished native app.
+Pixie runs its agent **in-process** — there is no external CLI to install. The built-in engine drives an agent loop directly in Rust (via the `pixie-pi` crate) and calls the Anthropic Messages API, streaming results back as a polished native UI. Configure an `ANTHROPIC_API_KEY` and you're ready.
 
-Each conversation binds to an **engine** (today: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor Agent](https://cursor.com/docs/cli/overview), or [CodeBuddy](https://www.codebuddy.ai/docs/cli/quickstart)). You can mix engines across workspaces and sessions: one chat on Claude, another on Cursor, both running in parallel.
-
-Use Pixie for programming, office documents, data analysis, news, writing — wherever a headless agent CLI can act on files and tools in a folder you choose.
+Use Pixie for programming, office documents, data analysis, news, and writing — wherever an agent can act on files and tools in a folder you choose.
 
 ---
 
 ## Highlights
 
-- **Pluggable engines** — Pick an engine per session. Claude Code and Cursor Agent are supported today; the backend is built to add more.
+- **Built-in engine** — One engine, no install. The agent loop runs inside the app and calls the Anthropic Messages API directly; configure an API key and go.
 - **Multi-workspace agents** — Add any number of folders as workspaces. Each becomes the agent's working directory, and many sessions can stream in parallel.
-- **Live agent activity** — Streaming markdown with syntax highlighting, real-time tool-call cards, extended-thinking text (engine-dependent), and token / cost / duration readouts.
-- **Conversation continuity** — Follow-up messages resume the same CLI session so context carries across turns.
-- **Per-engine model config** — Override API keys, models, and env vars separately for each engine in Settings.
-- **Scheduled tasks** — Run prompts on a schedule (daily, weekdays, or every N minutes / hours) headlessly against a workspace. Results appear in the sidebar with desktop notifications.
-- **Workspace panel** — A resizable side panel with **Files**, **Preview**, **Git**, **Browser**, and a real **Terminal** (PTY-backed). Useful when you need deeper file and version control access.
-- **Knowledge base** — Conversations are summarized to Obsidian-compatible markdown notes with YAML frontmatter. A built-in BM25 search engine (with CJK tokenization via jieba) indexes the vault for fast retrieval. KB context is injected into agent messages so agents can leverage past conversations. Related notes are linked via `[[wiki-links]]` for discoverability.
-- **Skills & plugin marketplace** — Discover skills on disk, insert `/skill` invocations from the composer, and browse or install plugins from marketplaces. Pixie follows the **Claude agent standard** for skills and plugins (`.claude/skills`, `.claude-plugin/`, etc.) — a de-facto convention shared by Claude Code, Cursor Agent, and other compatible engines.
-- **System-tray resident** — Closing the window hides to the tray so scheduled tasks keep firing.
+- **Live agent activity** — Streaming markdown with syntax highlighting, real-time tool-call cards, extended-thinking text, and token / duration readouts.
+- **Conversation continuity** — Follow-up messages reuse the same in-process session so context carries across turns.
+- **Model config** — Override the model and `ANTHROPIC_*` env vars from Settings; each conversation can also pin its own model.
+- **Scheduled tasks** — Run prompts on a schedule (daily, weekdays, or every N minutes / hours) headlessly against a workspace. Results appear in the sidebar with notifications.
+- **Workspace panel** — A resizable side panel with **Files**, **Preview**, and **Git** for deeper file and version-control access.
+- **Knowledge base** — Conversations are summarized to Obsidian-compatible markdown notes with YAML frontmatter. A built-in BM25 search engine (with CJK tokenization via jieba) indexes the vault for fast retrieval. KB context can be injected into agent messages so agents leverage past conversations. Related notes are linked via `[[wiki-links]]`.
+- **Skills** — Discover Claude-format skills on disk and insert `/skill` invocations from the composer.
 - **Dark & light themes**, system prompt, keyboard shortcuts.
 
 ---
 
-## Supported engines
+## Engine
 
-| Engine | CLI | Notes |
-| --- | --- | --- |
-| **Claude Code** | `claude` | Reference implementation; skills, plugins, MCP |
-| **Cursor Agent** | `cursor-agent` / `agent` | Multi-model loops; supports the same skills & plugin ecosystem |
-| **CodeBuddy** | `cbc` | Tencent AI coding agent; supports skills & plugins standard |
+Pixie ships a single **built-in** engine. The agent loop runs in-process (Rust, via `pixie-pi`) and calls the Anthropic Messages API. The agent gets a fixed, file-only tool set — `read`, `edit`, `write`, `grep`, `find`, `ls` rooted at the active workspace (no shell tool). All tool calls are auto-approved within the workspace.
 
-Both engines speak the same **skills / marketplace conventions** (Claude-format `SKILL.md`, plugin marketplaces, `/skill-name` invocations). Pixie surfaces them engine-agnostically in the UI.
-
-Install **at least one** engine and authenticate it before using Pixie. See [Prerequisites](#prerequisites).
+Set `ANTHROPIC_API_KEY` before launching (and optionally `ANTHROPIC_BASE_URL` / `ANTHROPIC_MODEL`). See [Prerequisites](#prerequisites).
 
 ---
 
@@ -52,12 +43,8 @@ Install **at least one** engine and authenticate it before using Pixie. See [Pre
 - [Node.js](https://nodejs.org/) v18 or newer
 - [pnpm](https://pnpm.io/) (`npm install -g pnpm`)
 - A [Rust](https://www.rust-lang.org/tools/install) stable toolchain
-- **One or more agent CLIs**, installed and authenticated:
-  - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — `claude` on your `PATH`
-  - [Cursor Agent CLI](https://cursor.com/docs/cli/overview) — `cursor-agent` or `agent` on your `PATH`
-  - [CodeBuddy Code](https://www.codebuddy.ai/docs/cli/quickstart) — `cbc` on your `PATH`
-
-Pixie searches `PATH` plus common locations (`/usr/local/bin`, Homebrew, `~/.local/bin`, nvm, `~/.cursor/bin`) for engine binaries. It sources your interactive login shell so env vars (`ANTHROPIC_*`, `CURSOR_*`, etc.) are picked up even when launched from a `.app` bundle.
+- For Android builds: the **Tauri Android prerequisites** (JDK 17, Android Studio / SDK + NDK, and the Rust Android targets — see the [Tauri mobile guide](https://v2.tauri.app/start/prerequisites/))
+- An **Anthropic API key** in `ANTHROPIC_API_KEY`
 
 ## Installation
 
@@ -71,37 +58,37 @@ pnpm install      # frontend dependencies
 ## Running
 
 ```bash
-pnpm tauri dev   # development mode with hot reload
+pnpm tauri dev            # desktop dev mode with hot reload (primary dev loop)
+pnpm tauri android dev    # run on an Android device/emulator
 ```
 
 To produce a distributable bundle:
 
 ```bash
-pnpm tauri build                       # all bundle formats for your OS
-pnpm tauri build --debug --bundles app # a quick debug .app / executable
+pnpm tauri build          # desktop bundles for the host OS
+pnpm tauri android build  # Android APK / AAB
 ```
 
-> **Note** — Engines run in headless mode with permission prompts skipped so agents can act autonomously within the selected workspace. Only point Pixie at folders you trust the agent to read and modify. See [Security & data](#security--data).
+> **Note** — The agent acts autonomously within the selected workspace (tools are auto-approved). Only point Pixie at folders you trust the agent to read and modify. See [Security & data](#security--data).
 
 ---
 
 ## Usage
 
-1. **Add a workspace** — Sidebar → workspace switcher → *Add workspace*, then pick a folder. This is the agent's working directory (project, notes, ops scripts, anything on disk).
-2. **Choose an engine** — Use the **Engine** dropdown in the sidebar (default for new sessions) or rely on each conversation's bound engine.
-3. **Start an agent** — Type a message and press `Enter`. The first message starts a new session; later messages resume it.
-4. **Watch it work** — Tool calls, results, thinking text, and usage update live beneath the reply.
-5. **Open the workspace panel** — Toggle the panel in the header for files, diffs, terminal, and previews when you need them.
-6. **Skills & plugins** — Click ✨ in the composer to pick a `/skill` invocation, or open **Skills** in the sidebar to manage plugin marketplaces. Works with any engine that follows the Claude agent skills standard (Claude Code, Cursor, etc.).
-7. **Automate** — **Scheduled Tasks** runs prompts on a timer. Completed runs appear in the sidebar and notify you.
+1. **Add a workspace** — Sidebar → workspace switcher → *Add workspace*, then pick a folder. This is the agent's working directory.
+2. **Start an agent** — Type a message and press `Enter`. The first message starts a new session; later messages resume it.
+3. **Watch it work** — Tool calls, results, thinking text, and usage update live beneath the reply.
+4. **Open the workspace panel** — Toggle the panel in the header for files, diffs, and previews when you need them.
+5. **Skills** — Click ✨ in the composer to insert a `/skill` invocation discovered on disk.
+6. **Automate** — **Scheduled Tasks** runs prompts on a timer. Completed runs appear in the sidebar and notify you.
 
 ### Keyboard shortcuts
 
 | Action | Shortcut |
 | --- | --- |
 | New chat | `Ctrl/Cmd + N` |
-| Toggle sidebar | `Ctrl/Cmd + B` |
 | Toggle settings | `Ctrl/Cmd + ,` |
+| Search knowledge base | `Ctrl/Cmd + K` |
 | Send message | `Enter` |
 | New line | `Shift + Enter` |
 | Stop generation | `Esc` |
@@ -126,17 +113,11 @@ Pixie includes a local-first knowledge base that turns your conversation history
 - **Backfill existing conversations** — Use the "Backfill" button in Settings to summarize all past conversations into notes.
 - **Obsidian integration is optional** — The KB works entirely within Pixie. Obsidian is only needed for external viewing/editing.
 
-### Keyboard shortcut
-
-| Action | Shortcut |
-| --- | --- |
-| Search knowledge base | `Ctrl/Cmd + K` |
-
 ---
 
 ## Architecture
 
-Pixie is a Tauri v2 app: a Rust backend that owns process and PTY lifecycle, plus a React frontend over the IPC bridge.
+Pixie is a Tauri v2 app: a Rust backend that owns the in-process agent loop, plus a React frontend over the IPC bridge.
 
 ```
 ┌───────────────────────────────────────────────────────┐
@@ -150,38 +131,31 @@ Pixie is a Tauri v2 app: a Rust backend that owns process and PTY lifecycle, plu
 ┌──────────────────────────┴────────────────────────────┐
 │  Backend  ·  Rust (tokio)                              │
 │                                                        │
-│  Chat         send_message(engine) / stop_generation   │
-│  Engines      check_engines_available / model config   │
+│  Chat         send_message / stop_generation           │
+│  Engine       builtin session (in-process agent loop)  │
 │  Workspaces   select / set_active / list_directory     │
 │  KB           search_kb / index_kb / summarize / …     │
-│  Git / Files / Terminal / Skills / Plugins / Schedules │
+│  Git / Files / Skills / Schedules                      │
 │                                                        │
-│  Events: agent-response · agent-tool · agent-done · …    │
+│  Events: agent-response · agent-tool · agent-done · …  │
 └──────────────────────────┬────────────────────────────┘
-                           │  tokio::process (one child per conversation)
+                           │  in-process (no subprocess)
 ┌──────────────────────────┴────────────────────────────┐
-│  engine/  ·  pluggable agent backends                  │
-│    claude.rs   Claude Code  (--print stream-json)      │
-│    cursor.rs   Cursor Agent (--print stream-json)      │
-│    mod.rs      NormalizedEvent · spawn · parse_line    │
+│  engine/builtin/  ·  pixie_pi::AgentSession            │
+│    BuiltinSession   wraps the agent loop               │
+│    tools            read / edit / write / grep / find / ls │
+│    mod.rs           NormalizedEvent mapping             │
 └───────────────────────────────────────────────────────┘
 ```
 
 How a message flows:
 
-- The frontend calls `invoke("send_message", { engine, conversationId, … })`. The backend picks the engine, spawns one process **per conversation**, and returns immediately.
-- Each NDJSON line is parsed into a **normalized event** (text delta, tool start/result, usage, done). The backend emits unified `agent-*` Tauri events.
+- The frontend calls `invoke("send_message", { conversationId, … })`. The backend fetches-or-creates a `BuiltinSession` for that conversation and runs the agent loop **in-process** on tokio, returning events as they arrive.
+- Each agent event is mapped to a **normalized event** (text delta, tool start/result, usage, done) and emitted as a unified `agent-*` Tauri event.
 - `useChat` routes updates by `conversation_id` so parallel sessions stay independent.
-- `stop_generation` kills the child by PID without blocking the stream reader.
+- `stop_generation` cancels the running turn via the session's cancellation token.
 
-**Where state lives:** conversations (including per-session `engine`), workspaces, theme, and per-engine model config live in `localStorage`. Scheduled tasks and run history are persisted under the OS app-data directory. Session history is owned by each engine's CLI (`--session-id` / `--resume` for Claude; Cursor session ids tracked by Pixie).
-
-### Adding a new engine
-
-1. Add the engine id to `ENGINE_IDS` in `src-tauri/src/engine/mod.rs` and `AGENT_ENGINES` in `src/types.ts`.
-2. Implement `engine/<name>.rs`: `check_available`, `spawn_single`, `spawn_continue`, `parse_line`.
-3. Wire dispatch in `engine/mod.rs`.
-4. Add model-config fields in `ENGINE_MODEL_FIELDS` if the engine needs env overrides.
+**Where state lives:** conversations (including per-session model), workspaces, theme, and model config live in `config.json` / `history.jsonl` under the OS app-data dir (written through a coalesced serializer in `src/lib/storage.ts`). Scheduled tasks and run history are persisted alongside them.
 
 ---
 
@@ -191,26 +165,24 @@ How a message flows:
 pixie/
 ├── src/                         # Frontend (React + TypeScript)
 │   ├── components/              # ChatView, Sidebar, Settings, RightPanel, …
-│   ├── hooks/                   # useChat, useScheduledTasks
+│   ├── hooks/                   # useChat, useScheduledTasks, useIsMobile, …
+│   ├── i18n/                    # zh / en / ja locales
 │   ├── App.tsx
-│   └── types.ts                 # EngineModelConfigs, AgentEngineId, …
+│   └── types.ts
 ├── src-tauri/
 │   ├── src/
-│   │   ├── engine/              # Pluggable agent backends
-│   │   │   ├── mod.rs           # NormalizedEvent, AgentProcess, dispatch
-│   │   │   ├── claude.rs
-│   │   │   ├── cursor.rs
-│   │   │   ├── codebuddy.rs
-│   │   │   ├── persistent.rs    # Long-lived session management
-│   │   │   └── shared.rs        # Shell env, binary discovery
+│   │   ├── engine/              # Agent backend
+│   │   │   ├── mod.rs           # NormalizedEvent, ENGINE_IDS, dispatch
+│   │   │   ├── builtin/mod.rs   # BuiltinSession (pixie_pi::AgentSession)
+│   │   │   └── shared.rs        # Engine status helpers
 │   │   ├── search/              # Knowledge base search engine
 │   │   │   ├── mod.rs           # Index lifecycle, Tauri commands
 │   │   │   ├── bm25.rs          # BM25 scoring + jieba-rs CJK tokenizer
 │   │   │   ├── index.rs         # Inverted-index search engine
 │   │   │   └── parser.rs        # Obsidian YAML frontmatter parser
 │   │   ├── summarizer.rs        # Conversation → KB note writer
-│   │   ├── lib.rs               # Tauri commands, scheduler, tray
-│   │   └── pty.rs
+│   │   └── lib.rs               # Tauri commands, scheduler, AppState
+│   ├── gen/android/             # Tauri-generated Android project
 │   └── tauri.conf.json
 ├── package.json
 └── vite.config.ts
@@ -222,12 +194,13 @@ pixie/
 
 ```bash
 pnpm dev                  # Vite dev server only (no Tauri shell)
-pnpm tauri dev            # Full app with hot reload
+pnpm tauri dev            # Full desktop app with hot reload
 
 pnpm lint                 # ESLint
 
 cd src-tauri
-cargo check               # Type-check Rust
+cargo check               # Type-check Rust (host)
+cargo ndk check           # Type-check the Android target
 cargo clippy              # Lint Rust
 cargo test                # Unit tests
 ```
@@ -236,13 +209,13 @@ cargo test                # Unit tests
 
 | Layer | Technology |
 | --- | --- |
-| Desktop framework | Tauri v2 |
+| App framework | Tauri v2 |
 | Frontend | React 19, TypeScript |
 | Styling | Tailwind CSS 4 |
 | Build tool | Vite |
 | Backend | Rust, tokio |
+| Agent loop | `pixie-pi` (in-process, Anthropic Messages API) |
 | Markdown | react-markdown + remark-gfm |
-| Terminal | xterm.js + portable-pty |
 | Scheduling | chrono |
 | CJK search | jieba-rs (Chinese word segmentation) |
 | BM25 search | custom inverted-index engine |
@@ -251,9 +224,8 @@ cargo test                # Unit tests
 
 Open **Settings** (`Ctrl/Cmd + ,`):
 
-- **Agent engines** — availability, version, and binary path for each engine.
-- **Default engine** — used when creating new sessions.
-- **Model configuration** — per-engine env overrides (collapsed by default). Claude: `ANTHROPIC_*`, `CLAUDE_CODE_*`. Cursor: `CURSOR_API_KEY`, `CURSOR_MODEL`. CodeBuddy: `CODEBUDDY_*`.
+- **Engine** — readiness check (pings the model) and version.
+- **Model configuration** — env overrides for the builtin engine (`ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`, …).
 - **Knowledge base** — Obsidian vault path, backfill existing conversations, and index rebuild.
 - **System prompt** — optional prompt for agent sessions.
 - **Theme** — dark or light.
@@ -262,38 +234,35 @@ Open **Settings** (`Ctrl/Cmd + ,`):
 
 ## Security & data
 
-- Engines run headless with auto-approved tool execution within the active workspace. Only add workspaces you trust the agent to operate on.
-- Claude's `AskUserQuestion` tool is disabled in streaming mode (no channel to answer it); the model is steered to ask in plain prose instead.
-- Chat content, workspaces, and settings stay local. Scheduled tasks and run history live in the app-data directory. Nothing is sent anywhere except through the agent CLI you configure.
+- The agent runs in-process with auto-approved, file-only tools (`read`/`edit`/`write`/`grep`/`find`/`ls`) within the active workspace. Only add workspaces you trust the agent to operate on.
+- Chat content, workspaces, and settings stay local (app-data dir). The only network traffic is to the Anthropic API via the configured key/base URL.
 
 ---
 
 ## Troubleshooting
 
-**No engine available** — Install at least one CLI (`claude`, `cursor-agent`, or `cbc`). Check Settings → *Refresh*. Verify with `claude --version`, `cursor-agent --version`, or `cbc --version`.
+**Engine not ready** — Set `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_BASE_URL`) and restart. Use Settings → *Re-detect* to ping the model.
 
-**Env vars not picked up** — Pixie sources your login shell (`$SHELL -i -l -c env`). Restart the app after editing `.zprofile` / `.zshrc`.
-
-**Wrong engine on a session** — Each conversation keeps its bound engine. Start a new session or pick a different default engine for new chats.
-
-**Build errors** — `rustup update`, `cd src-tauri && cargo clean`, `rm -rf node_modules && pnpm install`.
-
-**Scheduled task didn't fire** — Pixie must be running (tray is fine). Overdue tasks more than 5 minutes are skipped to avoid catch-up bursts. Use *Run now* to test.
+**Scheduled task didn't fire** — Pixie must be running (there is no tray; closing the app quits it). Tasks overdue by more than 5 minutes are skipped to avoid catch-up bursts. Use *Run now* to test.
 
 **Knowledge base search returns no results** — Ensure the vault path in Settings points to a valid directory containing `.md` files under a `Pixie/` subfolder. Use "Rebuild Index" in Settings if the index is stale. Minimum query length is 2 characters.
 
 **KB notes not appearing** — Summarize a conversation first. Notes are written to `<vault>/Pixie/`. If you moved or renamed the vault, update the path in Settings and rebuild the index.
 
+**Build errors** — `rustup update`, `cd src-tauri && cargo clean`, `rm -rf node_modules && pnpm install`.
+
 ---
 
 ## Contributing
 
-Contributions are welcome — especially new **engines** and general-agent UX improvements:
+Contributions are welcome:
 
 1. Fork the repo and create a feature branch.
 2. Rust: `cargo fmt` / `cargo clippy`. Frontend: `pnpm lint`.
 3. Keep Tauri commands typed end-to-end (Rust ↔ `src/types.ts`).
 4. Open a pull request describing the change.
+
+See `CONTRIBUTING.md` for details.
 
 ## License
 

@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect, useRef, memo } from "react";
 import type { ConversationEntry } from "../hooks/useChat";
-import type { WorkspaceState, AgentEngineId, EngineModelConfigs, LoopTask } from "../types";
-import { useDragRegion } from "../hooks/useDragRegion";
+import type { WorkspaceState, AgentEngineId, EngineModelConfigs } from "../types";
 import NewAgentModal from "./NewAgentModal";
 import EngineBadge from "./EngineBadge";
 
@@ -20,8 +19,6 @@ interface SidebarProps {
   onSetWorkspaceFilter: (id: string | null) => void;
   onOpenSettings: () => void;
   onOpenTasks: () => void;
-  onOpenLoops: () => void;
-  onOpenSkills: () => void;
   isOpen: boolean;
   onClose: () => void;
   defaultEngine: AgentEngineId;
@@ -30,8 +27,6 @@ interface SidebarProps {
   /** Engine ids that are installed + ready; the New Agent picker is limited to these. */
   readyEngineIds: AgentEngineId[];
   defaultWorkspacePath: string;
-  /** Active loop tasks — used to group loop-iteration conversations in the sidebar. */
-  loopTasks: LoopTask[];
 }
 
 function relativeTime(ts: number): string {
@@ -170,7 +165,7 @@ const ConversationRow = memo(function ConversationRow({
         className={`shrink-0 p-1 rounded transition-all ${
           confirmDelete
             ? "bg-red-500/30 text-red-400"
-            : "opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-red-400"
+            : "hover:bg-red-500/20 text-red-400"
         }`}
         title={confirmDelete ? "Click again to confirm" : "Delete conversation"}
       >
@@ -219,97 +214,6 @@ function SectionHeader({
       </svg>
       {label} · {count}
     </button>
-  );
-}
-
-/** A collapsible group of loop iteration conversations under a loop task name. */
-function LoopGroup({
-  group,
-  activeId,
-  generatingIds,
-  onSelect,
-  onDelete,
-}: {
-  group: { taskId: string; taskName: string; status: LoopTask["status"]; entries: ConversationEntry[] };
-  activeId: string | null;
-  generatingIds: Set<string>;
-  onSelect: (id: string, workspaceId: string) => void;
-  onDelete: (id: string, workspaceId: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(true);
-  const isRunning = group.status === "running";
-
-  const statusIcon = isRunning ? (
-    <div className="w-2.5 h-2.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0" />
-  ) : null;
-
-  return (
-    <div className="mb-1">
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center gap-1.5 px-2 py-1 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-      >
-        <svg
-          width="10" height="10" viewBox="0 0 10 10" fill="none"
-          className={`shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`}
-        >
-          <path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        {statusIcon}
-        <svg width="12" height="12" viewBox="0 0 14 14" fill="none" className="shrink-0 text-[var(--text-secondary)]">
-          <path d="M2 7a5 5 0 119 0 5 5 0 01-9 0z" stroke="currentColor" strokeWidth="1.2" />
-          <path d="M7 2v2M7 10v2M2 7h2M10 7h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-        </svg>
-        <span className="font-medium truncate">{group.taskName}</span>
-        <span className="opacity-60">· {group.entries.length}</span>
-      </button>
-      {expanded && (
-        <div className="pl-3">
-          {group.entries.map((entry) => {
-            const conv = entry.conversation;
-            const isActive = conv.id === activeId;
-            const isGenerating = generatingIds.has(conv.id);
-            return (
-              <div
-                key={conv.id}
-                onClick={() => onSelect(conv.id, entry.workspaceId)}
-                className={`
-                  group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer mb-0.5
-                  transition-colors
-                  ${isActive
-                    ? "bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
-                    : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]/40"
-                  }
-                `}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    {isGenerating && (
-                      <span className="shrink-0 w-2 h-2 rounded-full bg-green-400 animate-pulse" title="Generating..." />
-                    )}
-                    <p className="text-sm truncate leading-tight">{conv.title}</p>
-                  </div>
-                  <p className="text-[10px] mt-0.5 opacity-60 truncate flex items-center gap-1.5">
-                    <EngineBadge engine={conv.engine} />
-                    <span className="opacity-60">·</span>
-                    <span>{relativeTime(conv.updatedAt)}</span>
-                  </p>
-                </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onDelete(conv.id, entry.workspaceId); }}
-                  className="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-red-400 transition-all"
-                  title="Delete conversation"
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-                    <path d="M4.5 2h5a.5.5 0 010 1h-5a.5.5 0 010-1zM3 4h8l-.7 8.4a1 1 0 01-1 .9H4.7a1 1 0 01-1-.9L3 4zm2.5 2v5M7 6v5M8.5 6v5" stroke="currentColor" strokeWidth="1" fill="none" strokeLinecap="round" />
-                  </svg>
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -369,8 +273,6 @@ export default function Sidebar({
   onSetWorkspaceFilter,
   onOpenSettings,
   onOpenTasks,
-  onOpenLoops,
-  onOpenSkills,
   isOpen,
   onClose,
   defaultEngine,
@@ -378,13 +280,11 @@ export default function Sidebar({
   engineModelConfigs,
   readyEngineIds,
   defaultWorkspacePath,
-  loopTasks,
 }: SidebarProps) {
   const [search, setSearch] = useState("");
   const [wsPendingRemove, setWsPendingRemove] = useState<string | null>(null);
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
   const wsDropdownRef = useRef<HTMLDivElement>(null);
-  const handleDragRegion = useDragRegion();
 
   // Close workspace dropdown on outside clicks
   useEffect(() => {
@@ -399,7 +299,6 @@ export default function Sidebar({
   }, [wsDropdownOpen]);
 
   const [historyExpanded, setHistoryExpanded] = useState(false);
-  const [loopsExpanded, setLoopsExpanded] = useState(true);
   const [newAgentModalOpen, setNewAgentModalOpen] = useState(false);
 
   // The default engine may not be ready (e.g. the user logged it out since). The
@@ -461,27 +360,11 @@ export default function Sidebar({
     return list;
   }, [entries, workspaceFilter, search, workspaces]);
 
-  const { activeEntries, historyEntries, loopGroups } = useMemo(() => {
+  const { activeEntries, historyEntries } = useMemo(() => {
     const active: ConversationEntry[] = [];
     const history: ConversationEntry[] = [];
-    const loopIterMap = new Map<string, { taskName: string; taskId: string; entries: ConversationEntry[] }>();
 
     for (const entry of filtered) {
-      // Loop iteration conversations are grouped separately.
-      if (entry.conversation.loopTaskId) {
-        const key = entry.conversation.loopTaskId;
-        const existing = loopIterMap.get(key);
-        if (existing) {
-          existing.entries.push(entry);
-        } else {
-          loopIterMap.set(key, {
-            taskId: key,
-            taskName: entry.conversation.loopTaskName ?? key,
-            entries: [entry],
-          });
-        }
-        continue;
-      }
       if (isActiveEntry(entry, generatingIds)) {
         active.push(entry);
       } else {
@@ -489,33 +372,11 @@ export default function Sidebar({
       }
     }
 
-    // Build loop groups: each group keyed by taskId, with status from the
-    // matching LoopTask and sorted iteration entries.
-    const groups: { taskId: string; taskName: string; status: LoopTask["status"]; entries: ConversationEntry[] }[] = [];
-    for (const [taskId, data] of loopIterMap) {
-      const matchingTask = loopTasks.find((t) => t.id === taskId);
-      groups.push({
-        taskId,
-        taskName: data.taskName,
-        status: matchingTask?.status ?? "idle",
-        entries: sortEntries(data.entries, generatingIds),
-      });
-    }
-    // Running loops first, then by recent activity.
-    groups.sort((a, b) => {
-      if (a.status === "running" && b.status !== "running") return -1;
-      if (b.status === "running" && a.status !== "running") return 1;
-      const aLatest = a.entries[0]?.conversation.updatedAt ?? 0;
-      const bLatest = b.entries[0]?.conversation.updatedAt ?? 0;
-      return bLatest - aLatest;
-    });
-
     return {
       activeEntries: sortEntries(active, generatingIds),
       historyEntries: sortEntries(history, generatingIds),
-      loopGroups: groups,
     };
-  }, [filtered, generatingIds, loopTasks]);
+  }, [filtered, generatingIds]);
 
   const activeInHistory = useMemo(
     () => !!activeId && historyEntries.some((e) => e.conversation.id === activeId),
@@ -528,23 +389,29 @@ export default function Sidebar({
 
   return (
     <>
-      {isOpen && (
-        <div className="fixed inset-0 bg-black/50 z-30 lg:hidden" onClick={onClose} />
-      )}
-
       <aside
         className={`
-          fixed top-0 left-0 z-40 h-full w-[280px] bg-[var(--bg-secondary)] border-r border-[var(--border-color)]
+          fixed top-0 left-0 z-40 h-full w-full lg:w-[280px] bg-[var(--bg-secondary)] border-r border-[var(--border-color)]
           flex-col
           transition-transform duration-200 ease-out
           lg:relative
           ${isOpen ? "flex translate-x-0 sidebar-enter" : "hidden"}
         `}
       >
-        {/* macOS traffic light drag region */}
-        {navigator.platform?.includes("Mac") && (
-          <div className="shrink-0 h-[38px]" onMouseDown={handleDragRegion} />
-        )}
+        {/* Mobile: the conversation list is a full-screen overlay, so the
+            header hamburger (hidden behind it) can't dismiss it — give the
+            list its own close button. Desktop keeps the toolbar toggle. */}
+        <div className="lg:hidden flex justify-end px-3 pt-3 pb-1">
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] transition-colors"
+            aria-label="Close"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
         {/* Workspace filter & management */}
         {visibleWorkspaces.length > 0 ? (
           <div className="px-3 py-2 border-b border-[var(--border-color)]">
@@ -695,22 +562,6 @@ export default function Sidebar({
                 </div>
               )}
 
-              {/* Loop iteration groups */}
-              {loopGroups.length > 0 && (
-                <div className="mb-2">
-                  <SectionHeader
-                    label="Loops"
-                    count={loopGroups.reduce((s, g) => s + g.entries.length, 0)}
-                    collapsible
-                    expanded={loopsExpanded}
-                    onToggle={() => setLoopsExpanded((v) => !v)}
-                  />
-                  {loopsExpanded && loopGroups.map((group) => (
-                    <LoopGroup key={group.taskId} group={group} activeId={activeId} generatingIds={generatingIds} onSelect={onSelect} onDelete={onDelete} />
-                  ))}
-                </div>
-              )}
-
               {historyEntries.length > 0 && (
                 <div>
                   <SectionHeader
@@ -779,17 +630,6 @@ export default function Sidebar({
             </button>
           </div>
           <button
-            onClick={onOpenLoops}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs transition-colors"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2 7a5 5 0 119 0 5 5 0 01-9 0z" stroke="currentColor" strokeWidth="1.2" />
-              <path d="M7 2v2M7 10v2M2 7h2M10 7h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-              <path d="M4.5 4.5l1 1M8.5 8.5l1 1M4.5 9.5l1-1M8.5 5.5l1-1" stroke="currentColor" strokeWidth="0.8" strokeLinecap="round" />
-            </svg>
-            Loops
-          </button>
-          <button
             onClick={onOpenTasks}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs transition-colors"
           >
@@ -798,24 +638,6 @@ export default function Sidebar({
               <path d="M7 4v3l2 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             Scheduled Tasks
-          </button>
-          <button
-            onClick={onOpenSkills}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs transition-colors"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M12 3l1.9 4.8L18.7 9.7l-4.8 1.9L12 16.4l-1.9-4.8L5.3 9.7l4.8-1.9L12 3z" />
-            </svg>
-            Skills
           </button>
           <button
             onClick={onOpenSettings}

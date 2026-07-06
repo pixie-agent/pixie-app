@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import type { ScheduledTask, ScheduleSpec, TaskRunRecord, WorkspaceState, AgentEngineId } from "../types";
 import { AGENT_ENGINES } from "../types";
-import { useDragRegion } from "../hooks/useDragRegion";
 
 interface ScheduledTasksPanelProps {
   workspaces: WorkspaceState[];
@@ -129,7 +128,6 @@ export default function ScheduledTasksPanel({
   onRunNow,
   onClose,
 }: ScheduledTasksPanelProps) {
-  const handleDragRegion = useDragRegion();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
@@ -192,9 +190,8 @@ export default function ScheduledTasksPanel({
 
   return (
     <div className="settings-enter flex flex-col flex-1 min-h-0 bg-[var(--bg-secondary)]">
-        {/* Header — drag empty areas to move window */}
+        {/* Header */}
         <div
-          onMouseDown={handleDragRegion}
           className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-[var(--border-color)]"
         >
           <h2 className="text-base font-semibold text-[var(--text-primary)]">

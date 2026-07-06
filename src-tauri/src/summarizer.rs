@@ -218,7 +218,7 @@ fn render_note(
 ) -> String {
     let created = Local::now().to_rfc3339();
     let ws = workspace_path.unwrap_or("");
-    let eng = engine.unwrap_or("claude");
+    let eng = engine.unwrap_or("builtin");
 
     let mut note = format!(
         "---\n\
@@ -271,7 +271,7 @@ mod tests {
             "Test Title",
             "abc-123",
             Some("/tmp/project"),
-            Some("claude"),
+            Some("builtin"),
             "## User\nHello\n\n## Assistant\nHi there",
             &[],
         );
@@ -279,6 +279,7 @@ mod tests {
         assert!(content.contains("title: \"Test Title\""));
         assert!(content.contains("conversation_id: \"abc-123\""));
         assert!(content.contains("workspace: \"/tmp/project\""));
+        assert!(content.contains("engine: builtin"));
         assert!(content.contains("tags: [pixie, ai-conversation]"));
         assert!(content.contains("## User"));
         assert!(content.contains("Hi there"));

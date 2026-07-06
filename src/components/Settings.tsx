@@ -1,11 +1,8 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { useTranslation } from "react-i18next";
 import type { EngineStatus, AgentEngineId, EngineModelConfigs } from "../types";
 import { AGENT_ENGINES, ENGINE_MODEL_FIELDS } from "../types";
-import { useUpdater } from "../hooks/useUpdater";
-import { useDragRegion } from "../hooks/useDragRegion";
 import LanguageSelector from "./LanguageSelector";
 
 // Brand mark — same art as the app/README icon.
@@ -66,7 +63,6 @@ export default function Settings({
   backfillStatus,
 }: SettingsProps) {
   const { t } = useTranslation();
-  const handleDragRegion = useDragRegion();
   const [_checking, setChecking] = useState(false);
   const [expandedEngines, setExpandedEngines] = useState<Record<AgentEngineId, boolean>>({
     builtin: true, // expanded by default — these fields are required on mobile (no env vars)
@@ -76,7 +72,6 @@ export default function Settings({
     ANTHROPIC_BASE_URL: "https://api.anthropic.com",
     ANTHROPIC_MODEL: "claude-sonnet-4-6",
   };
-  const updater = useUpdater();
   const [appVersion, setAppVersion] = useState("");
 
   useEffect(() => {
@@ -91,9 +86,8 @@ export default function Settings({
 
   return (
     <div className="settings-enter flex flex-col flex-1 min-h-0 bg-[var(--bg-secondary)]">
-        {/* Header — drag empty areas to move window */}
+        {/* Header */}
         <div
-          onMouseDown={handleDragRegion}
           className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-[var(--border-color)]"
         >
           <h2 className="text-base font-semibold text-[var(--text-primary)]">
@@ -253,34 +247,6 @@ export default function Settings({
                     Reset
                   </button>
                 )}
-                <button
-                  onClick={async () => {
-                    const path = vaultPath || defaultVaultPath;
-                    if (!path) return;
-                    try {
-                      const installed = await invoke<boolean>("check_obsidian_installed");
-                      if (!installed) {
-                        alert("Obsidian is not installed. Download it from https://obsidian.md to view your knowledge base.");
-                        return;
-                      }
-                      await invoke("open_vault_in_obsidian", { vaultPath: path });
-                    } catch (e) {
-                      console.error(e);
-                    }
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-xs font-medium transition-colors"
-                >
-                  Open in Obsidian
-                </button>
-                <button
-                  onClick={() => {
-                    const path = vaultPath || null;
-                    invoke("open_vault_folder", { vaultPath: path }).catch(() => {});
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--accent)]/20 text-xs text-[var(--text-primary)] transition-colors"
-                >
-                  Open Folder
-                </button>
                 <button
                   onClick={onBackfill}
                   className="px-3 py-1.5 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--accent)]/20 text-xs text-[var(--text-primary)] transition-colors"
@@ -455,8 +421,7 @@ export default function Settings({
                 <p className="text-sm text-[var(--text-primary)]">Pixie</p>
               </div>
               <p className="text-xs text-[var(--text-secondary)]">
-                A general-purpose desktop AI agent workspace.
-                Supports Claude, Cursor, and CodeBuddy engines.
+                A general-purpose AI agent workspace for Android.
               </p>
               <p className="text-xs text-[var(--text-secondary)]">
                 Built with Tauri v2 + React + TypeScript
@@ -465,125 +430,6 @@ export default function Settings({
                 Version: {appVersion || "0.1.1"}
               </p>
 
-              {/* Update check */}
-              <div className="pt-2 mt-1 border-t border-[var(--border-color)]">
-                {updater.status === "up-to-date" && (
-                  <p className="text-xs text-[var(--text-secondary)] mb-2">
-                    You&apos;re on the latest version.
-                  </p>
-                )}
-                {updater.status === "available" && updater.newVersion && (
-                  <p className="text-xs text-[var(--text-primary)] mb-2">
-                    Pixie {updater.newVersion} is available.
-                  </p>
-                )}
-                {updater.status === "downloading" &&
-                  updater.contentLength > 0 && (
-                    <p className="text-xs text-[var(--text-secondary)] mb-2">
-                      Downloading…{" "}
-                      {Math.round(
-                        (updater.downloaded / updater.contentLength) * 100
-                      )}
-                      %
-                    </p>
-                  )}
-                {updater.status === "installed" && (
-                  <p className="text-xs text-[var(--text-primary)] mb-2">
-                    Update ready. Restart to apply.
-                  </p>
-                )}
-                {updater.status === "error" && updater.error && (
-                  <p className="text-xs text-red-400 mb-2 break-all">
-                    {updater.error}
-                  </p>
-                )}
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    onClick={
-                      updater.status === "available"
-                        ? updater.downloadAndInstall
-                        : updater.status === "installed"
-                          ? updater.restart
-                          : updater.checkForUpdates
-                    }
-                    disabled={
-                      updater.status === "checking" ||
-                      updater.status === "downloading"
-                    }
-                    className="px-3 py-1.5 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-xs font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    {updater.status === "checking"
-                      ? "Checking…"
-                      : updater.status === "downloading"
-                        ? "Downloading…"
-                        : updater.status === "available"
-                          ? `Install ${updater.newVersion}`
-                          : updater.status === "installed"
-                            ? "Restart Now"
-                            : "Check for Updates"}
-                  </button>
-                  {/* Beta channel: opt into prerelease builds to try new,
-                      less-stable features (e.g. Loops) before they ship to
-                      stable. Stable users are never auto-updated to beta. */}
-                  <button
-                    onClick={updater.installBeta}
-                    disabled={
-                      updater.status === "checking" ||
-                      updater.status === "downloading" ||
-                      updater.status === "installed"
-                    }
-                    title="Install the latest beta (prerelease) build to try new features early"
-                    className="px-3 py-1.5 rounded-lg bg-[var(--bg-tertiary)] hover:opacity-80 text-[var(--text-primary)] text-xs font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    Try the Beta
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Keyboard shortcuts */}
-          <section>
-            <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">
-              Keyboard Shortcuts
-            </h3>
-            <div className="space-y-2 text-xs text-[var(--text-secondary)]">
-              <div className="flex justify-between">
-                <span>New chat</span>
-                <kbd className="px-2 py-0.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)]">
-                  {navigator.platform?.includes("Mac") ? "Cmd" : "Ctrl"}+N
-                </kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Stop generation</span>
-                <kbd className="px-2 py-0.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)]">
-                  Escape
-                </kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Send message</span>
-                <kbd className="px-2 py-0.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)]">
-                  Enter
-                </kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>New line</span>
-                <kbd className="px-2 py-0.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)]">
-                  Shift+Enter
-                </kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Toggle sidebar</span>
-                <kbd className="px-2 py-0.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)]">
-                  {navigator.platform?.includes("Mac") ? "Cmd" : "Ctrl"}+B
-                </kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Settings</span>
-                <kbd className="px-2 py-0.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)]">
-                  {navigator.platform?.includes("Mac") ? "Cmd" : "Ctrl"}+,
-                </kbd>
-              </div>
             </div>
           </section>
         </div>

@@ -6,7 +6,7 @@ import type { ScheduledTask, TaskRunRecord } from "../types";
 /**
  * Thin hook over the scheduled-task Tauri commands. Loads tasks + run history on
  * mount, refreshes when the window regains focus (a task may have fired while the
- * app was minimized to the tray) and whenever a `task-run-complete` event arrives.
+ * app was backgrounded) and whenever a `task-run-complete` event arrives.
  *
  * Run injection (surfacing a run as a conversation) is intentionally left to the
  * caller via the returned `runs` array — keeps this hook focused on CRUD.
@@ -33,7 +33,7 @@ export function useScheduledTasks() {
     return () => window.clearTimeout(t);
   }, [refresh]);
 
-  // Refresh on focus: the scheduler can fire while the window is hidden in the tray.
+  // Refresh on focus: the scheduler can fire while the app is backgrounded.
   useEffect(() => {
     const onFocus = () => refresh();
     window.addEventListener("focus", onFocus);
