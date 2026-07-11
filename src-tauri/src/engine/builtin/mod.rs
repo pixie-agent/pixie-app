@@ -145,15 +145,19 @@ impl BuiltinSession {
                         log::info!("[builtin] TextDelta len={}", delta.len());
                         "MessageUpdate/TextDelta"
                     }
-                    AssistantMessageEvent::ThinkingDelta { .. } => {
-                        "MessageUpdate/ThinkingDelta"
-                    }
+                    AssistantMessageEvent::ThinkingDelta { .. } => "MessageUpdate/ThinkingDelta",
                     AssistantMessageEvent::Done { message, .. } => {
-                        log::info!("[builtin] Done event, text_len={}", message.text_content().len());
+                        log::info!(
+                            "[builtin] Done event, text_len={}",
+                            message.text_content().len()
+                        );
                         "MessageUpdate/Done"
                     }
                     AssistantMessageEvent::Error { message, .. } => {
-                        log::info!("[builtin] Error event, text_len={}", message.text_content().len());
+                        log::info!(
+                            "[builtin] Error event, text_len={}",
+                            message.text_content().len()
+                        );
                         "MessageUpdate/Error"
                     }
                     _ => "MessageUpdate/other",

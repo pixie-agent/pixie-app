@@ -243,20 +243,6 @@ pub struct FileEntry {
     pub size: u64,
 }
 
-/// A Claude skill discovered on disk (user- or project-level), surfaced so the
-/// input bar can offer a `/skill-name` picker.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SkillEntry {
-    /// Slash-invocable name, e.g. "skill-creator".
-    pub name: String,
-    /// One-line description (from SKILL.md frontmatter, or derived from the body).
-    pub description: String,
-    /// "user" (from ~/.claude) or "project" (from <workspace>/.claude).
-    pub source: String,
-    /// What gets inserted into the textarea, e.g. "/skill-creator ".
-    pub invocation: String,
-}
-
 // ---------------------------------------------------------------------------
 // Agent event emission (engine-agnostic)
 // ---------------------------------------------------------------------------
@@ -423,13 +409,8 @@ async fn send_message(
                     .map(|p| p.to_string_lossy().into_owned())
                     .unwrap_or_else(|_| ".".to_string())
             });
-            let session = BuiltinSession::new(
-                model.as_deref(),
-                None,
-                &cwd,
-                &api_key,
-                base_url.as_deref(),
-            );
+            let session =
+                BuiltinSession::new(model.as_deref(), None, &cwd, &api_key, base_url.as_deref());
             sessions.insert(conversation_id.clone(), session);
         }
 
@@ -518,214 +499,6 @@ fn read_file_content(path: String) -> Result<String, String> {
     } else {
         Ok(content)
     }
-}
-
-// ---------------------------------------------------------------------------
-// Skill discovery (user-level ~/.claude/skills + project-level .claude/skills)
-// ---------------------------------------------------------------------------
-
-/// Parse leading `---` YAML frontmatter from a SKILL.md body.
-/// Returns `(name, description, body)`. When there is no frontmatter, the
-/// whole text is returned as the body and both options are `None`. Line-based
-/// (no byte-offset math) so it is safe on arbitrary UTF-8.
-fn parse_frontmatter(text: &str) -> (Option<String>, Option<String>, String) {
-    let mut lines = text.lines();
-    let first = match lines.next() {
-        Some(l) => l,
-        None => return (None, None, String::new()),
-    };
-    if first.trim() != "---" {
-        // No frontmatter: re-include the first line so description derivation
-        // can read the document's first heading.
-        let mut body = String::from(first);
-        for l in lines {
-            body.push('\n');
-            body.push_str(l);
-        }
-        return (None, None, body);
-    }
-
-    let mut name: Option<String> = None;
-    let mut description: Option<String> = None;
-    let mut closed = false;
-    let mut body = String::new();
-    for line in lines {
-        if !closed {
-            if line.trim() == "---" {
-                closed = true;
-                continue;
-            }
-            if let Some(v) = line.strip_prefix("name:") {
-                if name.is_none() {
-                    name = Some(strip_scalar(v));
-                }
-            } else if let Some(v) = line.strip_prefix("description:") {
-                if description.is_none() {
-                    description = Some(strip_scalar(v));
-                }
-            }
-        } else if !body.is_empty() {
-            body.push('\n');
-            body.push_str(line);
-        } else {
-            body.push_str(line);
-        }
-    }
-
-    if closed {
-        (name, description, body)
-    } else {
-        // Opening fence with no closing fence: treat as no frontmatter.
-        (None, None, body)
-    }
-}
-
-/// Trim a YAML scalar value, stripping surrounding quotes.
-fn strip_scalar(v: &str) -> String {
-    v.trim()
-        .trim_matches('"')
-        .trim_matches('\'')
-        .trim()
-        .to_string()
-}
-
-/// Derive a one-line description from the first meaningful markdown line.
-fn derive_description(body: &str) -> String {
-    for line in body.lines() {
-        let t = line.trim();
-        if t.is_empty() {
-            continue;
-        }
-        let cleaned = t.trim_start_matches('#').trim().replace("**", "");
-        let cleaned = cleaned.trim();
-        if !cleaned.is_empty() {
-            return truncate_str(cleaned, 160);
-        }
-    }
-    String::new()
-}
-
-/// Truncate to `n` chars (UTF-8 safe) with an ellipsis.
-fn truncate_str(s: &str, n: usize) -> String {
-    if s.chars().count() <= n {
-        return s.to_string();
-    }
-    let mut out: String = s.chars().take(n).collect();
-    out.push('…');
-    out
-}
-
-/// Build a SkillEntry from a `<skills>/<name>/SKILL.md` path.
-/// The skill name falls back to the parent directory's stem when the
-/// frontmatter omits `name`.
-fn skill_entry_from_file(skill_md: &std::path::Path, source: &str) -> Option<SkillEntry> {
-    let bytes = fs::read(skill_md).ok()?;
-    let text = String::from_utf8_lossy(&bytes);
-    let (fm_name, fm_desc, body) = parse_frontmatter(&text);
-
-    let name = fm_name.or_else(|| {
-        skill_md
-            .parent()
-            .and_then(|p| p.file_stem())
-            .and_then(|s| s.to_str())
-            .map(String::from)
-    })?;
-    let name = name.trim().to_string();
-    if name.is_empty() {
-        return None;
-    }
-
-    Some(SkillEntry {
-        name: name.clone(),
-        description: truncate_str(&fm_desc.unwrap_or_else(|| derive_description(&body)), 200),
-        source: source.to_string(),
-        invocation: format!("/{} ", name),
-    })
-}
-
-/// Scan `<root>/skills/*/SKILL.md` and append any entries found.
-fn scan_skills(root: &std::path::Path, source: &str, out: &mut Vec<SkillEntry>) {
-    let Ok(entries) = fs::read_dir(root.join("skills")) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let dir = entry.path();
-        if !dir.is_dir() {
-            continue;
-        }
-        let skill_md = dir.join("SKILL.md");
-        if !skill_md.is_file() {
-            continue;
-        }
-        if let Some(skill) = skill_entry_from_file(&skill_md, source) {
-            out.push(skill);
-        }
-    }
-}
-
-/// Recursively walk a plugin tree and collect every `SKILL.md` found.
-/// Used for `~/.claude/plugins`, whose layout is
-/// `marketplaces/<mp>/(plugins|external_plugins)/<plugin>/skills/<skill>/SKILL.md`.
-fn scan_plugin_skills(root: &std::path::Path, out: &mut Vec<SkillEntry>) {
-    let Ok(entries) = fs::read_dir(root) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
-        if path.is_dir() {
-            // Skip noisy / irrelevant trees (.git, .github, node_modules, ...).
-            if name == "node_modules" || name.starts_with('.') {
-                continue;
-            }
-            scan_plugin_skills(&path, out);
-        } else if path.is_file() && name == "SKILL.md" {
-            if let Some(skill) = skill_entry_from_file(&path, "plugin") {
-                out.push(skill);
-            }
-        }
-    }
-}
-
-/// List all discoverable skills: user-level (`~/.claude/skills`),
-/// project-level (`<workspace>/.claude/skills`) and plugin skills
-/// (`~/.claude/plugins/**/SKILL.md`). When names collide, project shadows
-/// user, which shadows plugin.
-#[tauri::command]
-fn list_skills(workspace: Option<String>) -> Result<Vec<SkillEntry>, String> {
-    let mut entries: Vec<SkillEntry> = Vec::new();
-
-    if let Ok(home) = std::env::var("HOME") {
-        let claude_root = std::path::Path::new(&home).join(".claude");
-        scan_skills(&claude_root, "user", &mut entries);
-        scan_plugin_skills(&claude_root.join("plugins"), &mut entries);
-    }
-    if let Some(ws) = workspace {
-        let ws = ws.trim();
-        if !ws.is_empty() {
-            let project_root = std::path::Path::new(ws).join(".claude");
-            scan_skills(&project_root, "project", &mut entries);
-        }
-    }
-
-    // Rank: project (0) > user (1) > plugin (2); then alphabetical by name.
-    // dedup_by keeps the first of each name, so a project skill shadows a
-    // same-named user skill, which shadows a plugin one.
-    let rank = |s: &str| -> i32 {
-        match s {
-            "project" => 0,
-            "user" => 1,
-            _ => 2,
-        }
-    };
-    entries.sort_by(|a, b| {
-        rank(&a.source)
-            .cmp(&rank(&b.source))
-            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-    });
-    entries.dedup_by(|a, b| a.name.eq_ignore_ascii_case(&b.name));
-
-    Ok(entries)
 }
 
 #[tauri::command]
@@ -930,8 +703,7 @@ async fn save_uploaded_file(
         return Err("Empty file data".to_string());
     }
     let dir = get_data_dir(&app)?.join("uploads");
-    fs::create_dir_all(&dir)
-        .map_err(|e| format!("Failed to create uploads dir: {e}"))?;
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create uploads dir: {e}"))?;
 
     // Sanitize the client-supplied filename: keep the base name, strip path
     // separators, drop anything not alphanumeric/`-_.` so it can't escape the
@@ -939,10 +711,7 @@ async fn save_uploaded_file(
     // dotfiles (e.g. `.env`) keep their name.
     let safe_name = {
         let raw = filename.trim();
-        let stem = raw
-            .rsplit(|c| c == '/' || c == '\\')
-            .next()
-            .unwrap_or("");
+        let stem = raw.rsplit(['/', '\\']).next().unwrap_or("");
         let cleaned: String = stem
             .chars()
             .filter(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.'))
@@ -961,8 +730,7 @@ async fn save_uploaded_file(
         .map_err(|e| format!("System clock error: {e}"))?
         .as_millis();
     let path = dir.join(format!("{now}-{safe_name}"));
-    fs::write(&path, &bytes)
-        .map_err(|e| format!("Failed to write uploaded file: {e}"))?;
+    fs::write(&path, &bytes).map_err(|e| format!("Failed to write uploaded file: {e}"))?;
     Ok(path.to_string_lossy().to_string())
 }
 
@@ -995,6 +763,7 @@ async fn save_app_config(config: AppConfig, app: AppHandle) -> Result<(), String
 /// Returns immediately after spawning a background task; errors are logged,
 /// never surfaced to the caller.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 async fn summarize_conversation(
     app: AppHandle,
     conversation_id: String,
@@ -1008,7 +777,10 @@ async fn summarize_conversation(
     // Resolve vault path to an absolute directory before passing to summarizer.
     let resolved_vault = match vault_path.as_deref() {
         Some(p) if !p.trim().is_empty() => p.to_string(),
-        _ => get_data_dir(&app)?.join("kb").to_string_lossy().into_owned(),
+        _ => get_data_dir(&app)?
+            .join("kb")
+            .to_string_lossy()
+            .into_owned(),
     };
     let input = summarizer::SummarizeInput {
         conversation_id,
@@ -1145,7 +917,10 @@ async fn get_default_vault_path(app: AppHandle) -> Result<Option<String>, String
 async fn initialize_kb_vault(app: AppHandle, vault_path: Option<String>) -> Result<(), String> {
     let path = match vault_path.as_deref() {
         Some(p) if !p.trim().is_empty() => p.to_string(),
-        _ => get_data_dir(&app)?.join("kb").to_string_lossy().into_owned(),
+        _ => get_data_dir(&app)?
+            .join("kb")
+            .to_string_lossy()
+            .into_owned(),
     };
     // Create the vault directory if it doesn't exist yet.
     let _ = fs::create_dir_all(&path);
@@ -1966,7 +1741,6 @@ pub fn run() {
             set_engine_model_config,
             list_directory,
             read_file_content,
-            list_skills,
             stop_generation,
             get_default_workspace_path,
             set_default_workspace_path,
@@ -2004,46 +1778,6 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn frontmatter_name_and_description() {
-        let text = "---\nname: my-skill\ndescription: Does a thing.\n---\n# Body\n";
-        let (name, desc, body) = parse_frontmatter(text);
-        assert_eq!(name.as_deref(), Some("my-skill"));
-        assert_eq!(desc.as_deref(), Some("Does a thing."));
-        assert!(body.contains("# Body"));
-    }
-
-    #[test]
-    fn frontmatter_absent_returns_whole_body() {
-        // Mirrors the project's workflows/*.md (no frontmatter).
-        let text = "# AI Chat Desktop App\n\nSome content";
-        let (name, desc, body) = parse_frontmatter(text);
-        assert!(name.is_none());
-        assert!(desc.is_none());
-        assert!(body.starts_with("# AI Chat Desktop App"));
-    }
-
-    #[test]
-    fn every_skill_has_name_and_invocation() {
-        // Integration check against the real host. Passes on any machine
-        // (just asserts invariants on whatever was found); reports the count.
-        let skills = list_skills(None).unwrap_or_default();
-        let plugin_count = skills.iter().filter(|s| s.source == "plugin").count();
-        eprintln!(
-            "list_skills(None) -> {} skills ({} plugin)",
-            skills.len(),
-            plugin_count
-        );
-        for s in &skills {
-            assert!(!s.name.is_empty(), "empty name: {:?}", s);
-            assert!(
-                s.invocation.starts_with('/') && s.invocation.ends_with(' '),
-                "bad invocation: {:?}",
-                s
-            );
-        }
-    }
 
     #[test]
     fn cleanup_old_logs_purges_old_keeps_recent_and_data() {

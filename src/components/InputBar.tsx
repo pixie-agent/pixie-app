@@ -300,7 +300,6 @@ export default function InputBar({
     [addAttachments]
   );
 
-  // Close the skills dropdown when clicking outside of it.
   // Close the model dropdown when clicking outside of it.
   useEffect(() => {
     if (!modelDropdownOpen) return;

@@ -4,6 +4,7 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Tauri](https://img.shields.io/badge/Tauri-v2-blue.svg)
+![CI](https://github.com/pixie-agent/pixie-app/actions/workflows/ci.yml/badge.svg)
 ![Engine](https://img.shields.io/badge/engine-built--in%20Anthropic%20API-orange.svg)
 ![Platform](https://img.shields.io/badge/platform-Android-blue.svg)
 
@@ -25,7 +26,6 @@ Use Pixie for programming, office documents, data analysis, news, and writing �
 - **Scheduled tasks** — Run prompts on a schedule (daily, weekdays, or every N minutes / hours) headlessly against a workspace. Results appear in the sidebar with notifications.
 - **Workspace panel** — A resizable side panel with **Files**, **Preview**, and **Git** for deeper file and version-control access.
 - **Knowledge base** — Conversations are summarized to Obsidian-compatible markdown notes with YAML frontmatter. A built-in BM25 search engine (with CJK tokenization via jieba) indexes the vault for fast retrieval. KB context can be injected into agent messages so agents leverage past conversations. Related notes are linked via `[[wiki-links]]`.
-- **Skills** — Discover Claude-format skills on disk and insert `/skill` invocations from the composer.
 - **Dark & light themes**, system prompt, keyboard shortcuts.
 
 ---
@@ -49,8 +49,8 @@ Set `ANTHROPIC_API_KEY` before launching (and optionally `ANTHROPIC_BASE_URL` / 
 ## Installation
 
 ```bash
-git clone https://github.com/white1or1black/pixie.git
-cd pixie
+git clone https://github.com/pixie-agent/pixie-app.git
+cd pixie-app
 
 pnpm install      # frontend dependencies
 ```
@@ -67,7 +67,22 @@ To produce a distributable bundle:
 ```bash
 pnpm tauri build          # desktop bundles for the host OS
 pnpm tauri android build  # Android APK / AAB
+pnpm tauri android build --split-per-abi --apk  # Smaller per-ABI APKs
 ```
+
+For GitHub Releases, this repository builds Android artifacts from version tags:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The Android release workflow expects these repository secrets:
+
+- `ANDROID_KEYSTORE_BASE64` — base64-encoded release keystore
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
 
 > **Note** — The agent acts autonomously within the selected workspace (tools are auto-approved). Only point Pixie at folders you trust the agent to read and modify. See [Security & data](#security--data).
 
@@ -79,8 +94,7 @@ pnpm tauri android build  # Android APK / AAB
 2. **Start an agent** — Type a message and press `Enter`. The first message starts a new session; later messages resume it.
 3. **Watch it work** — Tool calls, results, thinking text, and usage update live beneath the reply.
 4. **Open the workspace panel** — Toggle the panel in the header for files, diffs, and previews when you need them.
-5. **Skills** — Click ✨ in the composer to insert a `/skill` invocation discovered on disk.
-6. **Automate** — **Scheduled Tasks** runs prompts on a timer. Completed runs appear in the sidebar and notify you.
+5. **Automate** — **Scheduled Tasks** runs prompts on a timer. Completed runs appear in the sidebar and notify you.
 
 ### Keyboard shortcuts
 
@@ -109,7 +123,7 @@ Pixie includes a local-first knowledge base that turns your conversation history
 
 ### Setup
 
-- **Configure vault path** — Open Settings (`Ctrl/Cmd + ,`) and set your Obsidian vault path (default: `~/Documents/Obsidian`).
+- **Configure vault path** — Open Settings (`Ctrl/Cmd + ,`) and set your Obsidian vault path. If unset, Pixie stores the default vault under the app data directory.
 - **Backfill existing conversations** — Use the "Backfill" button in Settings to summarize all past conversations into notes.
 - **Obsidian integration is optional** — The KB works entirely within Pixie. Obsidian is only needed for external viewing/editing.
 
@@ -135,7 +149,7 @@ Pixie is a Tauri v2 app: a Rust backend that owns the in-process agent loop, plu
 │  Engine       builtin session (in-process agent loop)  │
 │  Workspaces   select / set_active / list_directory     │
 │  KB           search_kb / index_kb / summarize / …     │
-│  Git / Files / Skills / Schedules                      │
+│  Git / Files / Schedules                               │
 │                                                        │
 │  Events: agent-response · agent-tool · agent-done · …  │
 └──────────────────────────┬────────────────────────────┘
@@ -195,12 +209,12 @@ pixie/
 ```bash
 pnpm dev                  # Vite dev server only (no Tauri shell)
 pnpm tauri dev            # Full desktop app with hot reload
+pnpm tauri android build --split-per-abi --apk
 
 pnpm lint                 # ESLint
 
 cd src-tauri
 cargo check               # Type-check Rust (host)
-cargo ndk check           # Type-check the Android target
 cargo clippy              # Lint Rust
 cargo test                # Unit tests
 ```

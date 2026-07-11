@@ -13,9 +13,8 @@ pub use shared::{set_engine_model_config, truncate_text, MAX_TOOL_RESULT_CHARS};
 ///
 /// There is exactly one engine: `builtin`, which runs the agent loop in-process
 /// (see `engine/builtin`) and spawns no CLI. Adding a subprocess-based engine is
-/// not a small plugin add — the old `spawn_*` / `parse_line` / readiness-probe
-/// plumbing was removed when the project went builtin-only and would have to be
-/// resurrected. See CLAUDE.md ("Engine: builtin, in-process").
+/// not a small plugin add: the old subprocess plumbing was removed when the
+/// project went builtin-only and would have to be reintroduced deliberately.
 pub const ENGINE_IDS: &[&str] = &["builtin"];
 
 pub fn normalize_engine_id(id: &str) -> Result<&'static str> {
@@ -134,6 +133,7 @@ pub enum NormalizedEvent {
         text: String,
         event_type: &'static str,
     },
+    #[allow(dead_code)]
     ThinkingText {
         content: String,
     },

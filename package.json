@@ -1,8 +1,15 @@
 {
   "name": "pixie-app",
   "private": true,
-  "repository": "",
-  "version": "0.8.0-beta.4",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pixie-agent/pixie-app.git"
+  },
+  "homepage": "https://github.com/pixie-agent/pixie-app#readme",
+  "bugs": {
+    "url": "https://github.com/pixie-agent/pixie-app/issues"
+  },
+  "version": "0.1.0",
   "type": "module",
   "packageManager": "pnpm@11.5.2",
   "scripts": {

@@ -1,22 +1,22 @@
 # Contributing to Pixie
 
 Thanks for your interest in improving Pixie! This is a small, approachable
-codebase — a React/TypeScript frontend and a Rust (Tauri v2) backend that drives
-the Claude Code CLI. This guide gets you set up and explains the conventions.
+codebase — a React/TypeScript frontend and a Rust (Tauri v2) backend with an
+in-process agent engine. This guide gets you set up and explains the
+conventions.
 
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) v18+
 - [pnpm](https://pnpm.io/) (`npm install -g pnpm`)
 - A [Rust](https://www.rust-lang.org/tools/install) stable toolchain
-- The [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), installed
-  and authenticated (`claude --version` must work on your `PATH`)
+- An Anthropic API key for running the built-in engine locally
 
 ## Getting started
 
 ```bash
-git clone https://github.com/white1or1black/pixie.git
-cd pixie
+git clone https://github.com/pixie-agent/pixie-app.git
+cd pixie-app
 pnpm install
 pnpm tauri dev
 ```
@@ -31,9 +31,9 @@ See the [README](README.md#project-structure) for the full map. In short:
 
 - `src/` — React frontend. Components in `src/components/`, state in `src/hooks/`,
   shared types in `src/types.ts`.
-- `src-tauri/src/` — Rust backend. `claude.rs` owns CLI process + stream parsing,
-  `pty.rs` owns terminals, `lib.rs` wires up Tauri commands, the scheduler, and the
-  system tray.
+- `src-tauri/src/` — Rust backend. `engine/builtin` owns the in-process agent
+  session, and `lib.rs` wires up Tauri commands, storage, search, and the
+  scheduler.
 
 ## Code style
 
@@ -78,17 +78,16 @@ Pixie keeps IPC typed end-to-end. To add a command:
 Use the GitHub issue templates. The most useful bug reports include:
 
 - OS and Pixie version
-- Output of `claude --version`
 - Exact reproduction steps
 - Relevant logs (run `pnpm tauri dev` and copy the backend output)
 
 ## Security
 
-Pixie runs Claude Code with `--dangerously-skip-permissions`, so the agent can
-read/modify files and run commands in the active workspace without prompts. If
-you find a way for the agent to escape the selected workspace or otherwise act
-outside the user's intent, please report it privately rather than in a public
-issue — see the repo's security policy or contact the maintainers directly.
+Pixie grants the built-in agent file-tool access to the active workspace without
+per-call prompts. If you find a way for the agent to escape the selected
+workspace or otherwise act outside the user's intent, please report it privately
+rather than in a public issue — see the repo's security policy or contact the
+maintainers directly.
 
 ## License
 

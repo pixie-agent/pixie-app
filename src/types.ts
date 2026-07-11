@@ -179,15 +179,6 @@ export interface FileEntry {
   size: number;
 }
 
-/** An agent skill discovered on disk (user-, project- or plugin-level). Uses the Claude agent skills standard (SKILL.md + frontmatter). */
-export interface SkillEntry {
-  name: string;
-  description: string;
-  source: "user" | "project" | "plugin";
-  /** Text inserted into the input when picked, e.g. "/skill-name ". */
-  invocation: string;
-}
-
 /** A preview-open request (what callers pass to the handler). */
 export type PreviewRequest =
   | { kind: "file"; path: string }
