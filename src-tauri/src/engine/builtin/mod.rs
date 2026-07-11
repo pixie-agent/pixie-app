@@ -280,7 +280,7 @@ fn map_agent_event(
                     event_type: "delta",
                 });
             }
-            AssistantMessageEvent::ThinkingDelta { delta: _, .. } => {
+            AssistantMessageEvent::ThinkingDelta { .. } => {
                 // Thinking deltas not accumulated into final_text
             }
             // The "Done" / "Error" stop events carry the full assembled
