@@ -48,7 +48,6 @@ jobs:
       - name: Set up Rust Android targets
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.82.0
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
 
       - name: Cache cargo
