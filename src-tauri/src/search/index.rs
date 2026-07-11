@@ -236,6 +236,12 @@ impl SearchIndex {
     }
 
     /// Load a previously saved index from disk.
+    ///
+    /// Currently unused by `ensure_index` (which always rebuilds from the
+    /// live directory for correctness on Android), but kept for a future
+    /// cold-start fast path that loads this file and then verifies it with
+    /// an mtime signature.
+    #[allow(dead_code)]
     pub fn load_from_disk(path: &Path) -> Result<Self> {
         let json = std::fs::read_to_string(path)?;
         let index: Self = serde_json::from_str(&json)?;

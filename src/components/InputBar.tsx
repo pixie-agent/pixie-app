@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-import SkillsDropdown from "./SkillsDropdown";
-import type { SkillEntry, AgentEngineId, EngineModelConfigs, ModelEntry } from "../types";
+import type { AgentEngineId, EngineModelConfigs, ModelEntry } from "../types";
 import { ENGINE_MODEL_ENV_KEY } from "../types";
 import { getExtension, IMAGE_EXTENSIONS } from "../preview";
 
@@ -14,7 +13,6 @@ interface InputBarProps {
   value: string;
   onChange: (value: string) => void;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
-  skills: SkillEntry[];
   /** Active workspace folder path (= Claude's CWD). Used to render @mentions
    *  relative to the project so they resolve cleanly. null when no workspace. */
   workspacePath?: string | null;
@@ -94,7 +92,6 @@ export default function InputBar({
   value,
   onChange,
   textareaRef,
-  skills,
   workspacePath,
   engine,
   model,
@@ -103,7 +100,6 @@ export default function InputBar({
   kbEnabled,
   onToggleKb,
 }: InputBarProps) {
-  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [customModelInput, setCustomModelInput] = useState("");
   const [availableModels, setAvailableModels] = useState<ModelEntry[]>([]);
@@ -111,7 +107,6 @@ export default function InputBar({
    *  appended to the message so Claude Code pulls them in as context. */
   const [attachments, setAttachments] = useState<string[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
-  const skillsWrapperRef = useRef<HTMLDivElement>(null);
   const modelWrapperRef = useRef<HTMLDivElement>(null);
   const modelDropdownListRef = useRef<HTMLDivElement>(null);
 
@@ -126,10 +121,6 @@ export default function InputBar({
   // Close any open dropdown the moment the input becomes disabled (e.g. the
   // active workspace is removed). Adjusting state during render avoids a
   // setState-in-effect; React discards the in-progress render and re-renders.
-  if (disabled && dropdownOpen) {
-    setDropdownOpen(false);
-  }
-
   // Auto-resize textarea
   useEffect(() => {
     const el = textareaRef.current;
@@ -212,16 +203,66 @@ export default function InputBar({
     [handleSend]
   );
 
-  // Open the native multi-file picker; returned paths are staged as attachments.
-  const handlePickFiles = useCallback(async () => {
+  // Open the native multi-file picker.
+  //
+  // On Android, `tauri-plugin-dialog`'s `pick_files` returns `content://`
+  // SAF URIs which the agent's `read` tool cannot open (it uses `std::fs`,
+  // and those URIs are not real filesystem paths). So we always go through a
+  // hidden `<input type=file multiple>`: the WebView's file chooser hands us
+  // real file *content* as Blobs, which we base64-encode and persist via the
+  // `save_uploaded_file` command into `<data_dir>/uploads/`. The returned
+  // absolute path is a real file the agent can read — on every platform.
+  // (Desktop keeps working too: the same `<input>` returns the picked files'
+  // bytes, and we persist them the same way; the originals' path is not used.)
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Persist an iterable of picked Files through the backend and stage the
+  // returned real paths as attachments.
+  const uploadFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const arr = Array.from(files);
+      const paths: string[] = [];
+      for (const file of arr) {
+        try {
+          const base64 = await blobToBase64(file);
+          const path = await invoke<string>("save_uploaded_file", {
+            data: base64,
+            filename: file.name || "upload.bin",
+          });
+          paths.push(path);
+        } catch (e) {
+          console.error("[upload] failed for", file.name, e);
+        }
+      }
+      if (paths.length > 0) addAttachments(paths);
+    },
+    [addAttachments],
+  );
+
+  const handlePickFiles = useCallback(() => {
     if (disabled || isGenerating) return;
-    try {
-      const result = await invoke<string[] | null>("pick_files");
-      if (result && result.length > 0) addAttachments(result);
-    } catch {
-      /* ignore picker errors / cancellations */
+    // Reuse a single hidden input; click it to open the OS file chooser.
+    if (!fileInputRef.current) {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.multiple = true;
+      input.style.display = "none";
+      input.addEventListener("change", () => {
+        const files = input.files;
+        if (files && files.length > 0) {
+          // Hand the staged FileList to the uploader; reset value so picking
+          // the same file twice still fires `change`.
+          uploadFiles(files).catch((e) =>
+            console.error("[upload] failed:", e),
+          );
+          input.value = "";
+        }
+      });
+      document.body.appendChild(input);
+      fileInputRef.current = input;
     }
-  }, [disabled, isGenerating, addAttachments]);
+    fileInputRef.current.click();
+  }, [disabled, isGenerating, uploadFiles]);
 
   // Paste a screenshot / copied image. The clipboard image Blob is base64-encoded
   // and written to disk by the backend; the returned path is staged as an
@@ -260,24 +301,6 @@ export default function InputBar({
   );
 
   // Close the skills dropdown when clicking outside of it.
-  useEffect(() => {
-    if (!dropdownOpen) return;
-    const onDown = (e: PointerEvent) => {
-      const target = e.target as Node;
-      // Close if click is outside the skills dropdown wrapper
-      if (skillsWrapperRef.current && !skillsWrapperRef.current.contains(target)) {
-        setDropdownOpen(false);
-      }
-    };
-    const id = requestAnimationFrame(() => {
-      document.addEventListener("pointerdown", onDown);
-    });
-    return () => {
-      cancelAnimationFrame(id);
-      document.removeEventListener("pointerdown", onDown);
-    };
-  }, [dropdownOpen]);
-
   // Close the model dropdown when clicking outside of it.
   useEffect(() => {
     if (!modelDropdownOpen) return;
@@ -342,27 +365,6 @@ export default function InputBar({
     setModelDropdownOpen(false);
     setCustomModelInput("");
   }, [onModelChange]);
-
-  // Insert the picked skill's invocation ("/skill-name ") into the draft.
-  const handleSelectSkill = useCallback((skill: SkillEntry) => {
-    const inv = skill.invocation;
-    const next =
-      value.trim().length === 0
-        ? inv
-        : value + (value.endsWith(" ") || value.endsWith("\n") ? "" : " ") + inv;
-    onChange(next);
-    setDropdownOpen(false);
-    // Refocus the textarea and place the caret at the end. The auto-resize
-    // effect (keyed on `value`) re-runs after onChange commits.
-    requestAnimationFrame(() => {
-      const el = textareaRef.current;
-      if (!el) return;
-      el.focus();
-      el.setSelectionRange(el.value.length, el.value.length);
-    });
-  }, [value, onChange, textareaRef]);
-
-  const toggleDropdown = useCallback(() => setDropdownOpen((v) => !v), []);
 
   const charCount = value.length;
   const nearLimit = charCount > MAX_CHARS * 0.9;
@@ -491,28 +493,6 @@ export default function InputBar({
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
             </svg>
           </button>
-
-          {/* Skills button + dropdown */}
-          <div ref={skillsWrapperRef} className="relative">
-            <button
-              type="button"
-              onClick={toggleDropdown}
-              disabled={disabled || isGenerating}
-              title="Browse skills"
-              className="flex items-center justify-center w-7 h-6 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 3l1.9 4.8L18.7 9.7l-4.8 1.9L12 16.4l-1.9-4.8L5.3 9.7l4.8-1.9L12 3z" />
-              </svg>
-            </button>
-            {dropdownOpen && (
-              <SkillsDropdown
-                skills={skills}
-                onSelect={handleSelectSkill}
-                onClose={() => setDropdownOpen(false)}
-              />
-            )}
-          </div>
 
           {/* KB context toggle */}
           <button

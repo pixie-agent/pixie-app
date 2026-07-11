@@ -65,7 +65,7 @@ function findWorkspaceForConversation(
  *  Includes text, images (as Obsidian ![[embeds]]), tool calls, and thinking.
  *  Skips system/empty messages. Optionally appends the final assistant text
  *  (from agent-done) with dedup. */
-function buildTranscript(messages: Message[], finalAssistantText?: string): string {
+function buildTranscript(messages: Message[]): string {
   const parts: string[] = [];
   for (const msg of messages) {
     if (msg.role === "system") continue;
@@ -105,15 +105,6 @@ function buildTranscript(messages: Message[], finalAssistantText?: string): stri
 
     if (subParts.length === 0) continue;
     parts.push(`${heading}\n\n${subParts.join("\n\n")}`);
-  }
-
-  // Append the final assistant text if it's not already the last message.
-  if (finalAssistantText?.trim()) {
-    const lastPart = parts[parts.length - 1];
-    const trimmed = finalAssistantText.trim();
-    if (!lastPart || !lastPart.endsWith(trimmed)) {
-      parts.push(`## Assistant\n\n${trimmed}`);
-    }
   }
 
   return parts.join("\n\n");
@@ -673,14 +664,26 @@ export function useChat(engineModelConfigs: EngineModelConfigs) {
         setError(null);
 
         // Fire-and-forget: write conversation to Obsidian vault.
+        // We must NOT read allConversationsRef.current here because React state
+        // updates are asynchronous — the ref still holds the pre-patch version
+        // where the assistant message content hasn't been replaced with full_text.
+        // Instead, patch the messages manually with the final text.
         {
           const convId = done.conversation_id;
           const wsId = findWorkspaceForConversation(allConversationsRef.current, convId, convIndexRef);
           const conv = wsId ? allConversationsRef.current[wsId]?.find((c) => c.id === convId) : undefined;
           if (conv) {
+            // Patch the last assistant message with full_text before building
+            // the transcript, so the KB note has the complete response.
+            const patchedMsgs = [...conv.messages];
+            const last = patchedMsgs[patchedMsgs.length - 1];
+            if (last && last.role === "assistant") {
+              const finalContent = done.full_text || last.content;
+              patchedMsgs[patchedMsgs.length - 1] = { ...last, content: finalContent };
+            }
             const vault = getConfig().vaultPath ?? null;
             // Always invoke — backend falls back to <data_dir>/kb/ if vaultPath is null.
-            const transcript = buildTranscript(conv.messages, done.full_text);
+            const transcript = buildTranscript(patchedMsgs);
             invoke("summarize_conversation", {
               conversationId: convId,
               workspacePath: wsId ?? null,

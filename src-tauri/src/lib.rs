@@ -905,6 +905,67 @@ async fn save_pasted_image(app: AppHandle, data: String, ext: String) -> Result<
     Ok(path.to_string_lossy().to_string())
 }
 
+/// Persist a user-selected file (from the Android file picker / webview
+/// `<input type=file>`) to disk and return its absolute path.
+///
+/// On Android, `tauri-plugin-dialog`'s `pick_files` returns `content://`
+/// URIs that the agent's `read` tool cannot open with `std::fs` (they are
+/// SAF virtual URIs, not real filesystem paths). To make uploaded files
+/// readable by the agent, the frontend instead uses a hidden `<input
+/// type=file>`, reads the chosen File as base64, and ships it here. We decode
+/// and write it under `<data_dir>/uploads/` (preserving the original
+/// filename when safe) and return the real absolute path, which is then
+/// staged as an attachment / `@mention` exactly like a pasted image.
+#[tauri::command]
+async fn save_uploaded_file(
+    app: AppHandle,
+    data: String,
+    filename: String,
+) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    let bytes = STANDARD
+        .decode(data.as_bytes())
+        .map_err(|e| format!("Invalid base64 file data: {e}"))?;
+    if bytes.is_empty() {
+        return Err("Empty file data".to_string());
+    }
+    let dir = get_data_dir(&app)?.join("uploads");
+    fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create uploads dir: {e}"))?;
+
+    // Sanitize the client-supplied filename: keep the base name, strip path
+    // separators, drop anything not alphanumeric/`-_.` so it can't escape the
+    // uploads dir or overwrite system files. A leading dot is allowed so
+    // dotfiles (e.g. `.env`) keep their name.
+    let safe_name = {
+        let raw = filename.trim();
+        let stem = raw
+            .rsplit(|c| c == '/' || c == '\\')
+            .next()
+            .unwrap_or("");
+        let cleaned: String = stem
+            .chars()
+            .filter(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.'))
+            .collect();
+        if cleaned.is_empty() || cleaned == "." || cleaned == ".." {
+            "upload.bin".to_string()
+        } else {
+            cleaned
+        }
+    };
+
+    // Monotonic suffix avoids collisions when the same filename is uploaded
+    // twice — we never want to clobber a previously-staged attachment.
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("System clock error: {e}"))?
+        .as_millis();
+    let path = dir.join(format!("{now}-{safe_name}"));
+    fs::write(&path, &bytes)
+        .map_err(|e| format!("Failed to write uploaded file: {e}"))?;
+    Ok(path.to_string_lossy().to_string())
+}
+
 /// Load `config.json`, or `None` when the file does not exist yet (first run).
 #[tauri::command]
 async fn load_app_config(app: AppHandle) -> Result<Option<AppConfig>, String> {
@@ -935,6 +996,7 @@ async fn save_app_config(config: AppConfig, app: AppHandle) -> Result<(), String
 /// never surfaced to the caller.
 #[tauri::command]
 async fn summarize_conversation(
+    app: AppHandle,
     conversation_id: String,
     workspace_path: Option<String>,
     title: Option<String>,
@@ -943,9 +1005,14 @@ async fn summarize_conversation(
     transcript: String,
     force_overwrite: Option<bool>,
 ) -> Result<(), String> {
+    // Resolve vault path to an absolute directory before passing to summarizer.
+    let resolved_vault = match vault_path.as_deref() {
+        Some(p) if !p.trim().is_empty() => p.to_string(),
+        _ => get_data_dir(&app)?.join("kb").to_string_lossy().into_owned(),
+    };
     let input = summarizer::SummarizeInput {
         conversation_id,
-        vault_path,
+        vault_path: Some(resolved_vault),
         workspace_path,
         title_hint: title.unwrap_or_default(),
         engine,
@@ -1048,13 +1115,13 @@ struct BackfillEntry {
 /// Search the knowledge base with a BM25 query. Returns ranked results.
 #[tauri::command]
 async fn search_kb(
-    _app: AppHandle,
+    app: AppHandle,
     query: String,
     vault_path: Option<String>,
 ) -> Result<Vec<search::index::SearchResult>, String> {
     let vault = match vault_path.as_deref() {
         Some(p) if !p.trim().is_empty() => PathBuf::from(p),
-        _ => default_vault_dir(),
+        _ => get_data_dir(&app)?.join("kb"),
     };
     search::search(&query, &vault, 10)
         .await
@@ -1064,11 +1131,8 @@ async fn search_kb(
 /// Return the effective vault path: the configured `vaultPath` if set, otherwise
 /// the default `<data_dir>/kb`. Returns `None` if the data dir cannot be resolved.
 #[tauri::command]
-async fn get_default_vault_path(_app: AppHandle) -> Result<Option<String>, String> {
-    // Place the default vault under the user's Documents directory so it's
-    // visible in Finder and can be synced via iCloud.  Falls back to the
-    // app data directory if Documents isn't available.
-    let kb = default_vault_dir();
+async fn get_default_vault_path(app: AppHandle) -> Result<Option<String>, String> {
+    let kb = get_data_dir(&app)?.join("kb");
     let _ = fs::create_dir_all(&kb);
     Ok(Some(kb.to_string_lossy().into_owned()))
 }
@@ -1078,10 +1142,10 @@ async fn get_default_vault_path(_app: AppHandle) -> Result<Option<String>, Strin
 /// user changes the vault path in Settings, so the vault is ready before they
 /// first click "Open in Obsidian" or save a conversation.
 #[tauri::command]
-async fn initialize_kb_vault(vault_path: Option<String>) -> Result<(), String> {
+async fn initialize_kb_vault(app: AppHandle, vault_path: Option<String>) -> Result<(), String> {
     let path = match vault_path.as_deref() {
         Some(p) if !p.trim().is_empty() => p.to_string(),
-        _ => default_vault_dir().to_string_lossy().into_owned(),
+        _ => get_data_dir(&app)?.join("kb").to_string_lossy().into_owned(),
     };
     // Create the vault directory if it doesn't exist yet.
     let _ = fs::create_dir_all(&path);
@@ -1910,6 +1974,7 @@ pub fn run() {
             select_workspace,
             pick_files,
             save_pasted_image,
+            save_uploaded_file,
             set_active_workspace,
             load_app_config,
             save_app_config,

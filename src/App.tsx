@@ -24,7 +24,6 @@ import type {
   KbSearchResult,
   PreviewRequest,
   PreviewTarget,
-  SkillEntry,
   TaskRunRecord,
   EngineStatus,
 } from "./types";
@@ -247,7 +246,7 @@ function AppShell() {
   const [engineModelConfigs, setEngineModelConfigs] = useState<EngineModelConfigs>(
     () => getConfig().engineModelConfigs,
   );
-  const [skills, setSkills] = useState<SkillEntry[]>([]);
+
   const [defaultVaultPath, setDefaultVaultPath] = useState<string | null>(null);
   const [backfillStatus, setBackfillStatus] = useState<string | null>(null);
   // Composer drafts are kept per conversation (keyed by conversation id, derived
@@ -394,22 +393,6 @@ function AppShell() {
       .then(setDefaultVaultPath)
       .catch(() => setDefaultVaultPath(null));
   }, []);
-
-  // Load skills for the skills picker: user-level always, project-level when a
-  // workspace is active. `reloadSkills` is reused after a plugin install/uninstall
-  // so the ✨ dropdown picks up newly added skills.
-  const reloadSkills = useCallback(() => {
-    invoke<SkillEntry[]>("list_skills", { workspace: activeWorkspace?.path ?? null })
-      .then(setSkills)
-      .catch((err) => {
-        console.error("list_skills failed", err);
-        setSkills([]);
-      });
-  }, [activeWorkspace?.path]);
-
-  useEffect(() => {
-    reloadSkills();
-  }, [reloadSkills]);
 
   const handleThemeChange = useCallback((t: "dark" | "light") => setTheme(t), []);
   const handleSystemPromptChange = useCallback((prompt: string) => setSystemPrompt(prompt), []);
@@ -777,7 +760,6 @@ ${entries}
               value={draft}
               onChange={handleDraftChange}
               textareaRef={composerRef}
-              skills={skills}
               workspacePath={activeWorkspace?.path ?? null}
               engine={activeConversation?.engine}
               model={activeConversation?.model}
