@@ -32,11 +32,11 @@ chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
 thiserror = "2"
 # Decodes base64-encoded pasted-image bytes coming from the webview clipboard.
-base64 = "0.22"
+base64 = "0.23"
 # URL-encoding for Obsidian URI scheme (obsidian://open?vault=...).
 urlencoding = "2"
 # Chinese word segmentation for CJK search tokenization.
-jieba-rs = "0.10"
+jieba-rs = "0.11"
 # Regex matching for loop exit conditions (NoErrorPattern, SuccessPattern).
 regex = "1"
 # HTTP client for builtin engine (Anthropic Messages API SSE streaming).
